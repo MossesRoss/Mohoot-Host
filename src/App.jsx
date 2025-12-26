@@ -39,7 +39,9 @@ const firebaseConfig = (typeof __firebase_config !== 'undefined')
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'mohoot-prod';
 // --- CONFIGURATION END ---
 
