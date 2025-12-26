@@ -166,10 +166,6 @@ export default function App() {
       alert("Game starting (Background Sync)");
     }
     
-    // Always proceed (Optimistic)
-    localStorage.setItem('mohoot_host_active', JSON.stringify({ quizId: quiz.id, pin }));
-    setActiveSession({ quizId: quiz.id, pin });
-    setView('GAME');
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
