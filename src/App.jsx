@@ -9,6 +9,9 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   setDoc,
   updateDoc,
@@ -29,13 +32,17 @@ const envConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+console.log("Firebase Config Check:", envConfig);
+
 const firebaseConfig = (typeof __firebase_config !== 'undefined')
   ? JSON.parse(__firebase_config)
   : envConfig;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'mohoot-prod';
 // --- CONFIGURATION END ---
 
@@ -128,19 +135,24 @@ export default function App() {
 
   const launchGame = async (quiz) => {
     if (!user) return;
-    const pin = Math.floor(100000 + Math.random() * 900000).toString();
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'sessions', pin), {
-      hostId: user.uid,
-      quizId: quiz.id,
-      status: 'LOBBY',
-      currentQuestionIndex: 0,
-      players: {},
-      quizSnapshot: quiz,
-      lastUpdated: serverTimestamp()
-    });
-    localStorage.setItem('mohoot_host_active', JSON.stringify({ quizId: quiz.id, pin }));
-    setActiveSession({ quizId: quiz.id, pin });
-    setView('GAME');
+    try {
+      const pin = Math.floor(100000 + Math.random() * 900000).toString();
+      await setDoc(doc(db, 'artifacts', appId, 'sessions', pin), {
+        hostId: user.uid,
+        quizId: quiz.id,
+        status: 'LOBBY',
+        currentQuestionIndex: 0,
+        players: {},
+        quizSnapshot: quiz,
+        lastUpdated: serverTimestamp()
+      });
+      localStorage.setItem('mohoot_host_active', JSON.stringify({ quizId: quiz.id, pin }));
+      setActiveSession({ quizId: quiz.id, pin });
+      setView('GAME');
+    } catch (error) {
+      console.error("Failed to host game:", error);
+      alert("Failed to start game session: " + error.message);
+    }
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
@@ -249,7 +261,7 @@ export default function App() {
   );
 }
 
-const Editor = ({ quiz, onSave, onCancel }) => {
+const Editor = ({ quiz, onSave, onCancel, isSaving }) => {
   const [q, setQ] = useState(quiz);
   const [idx, setIdx] = useState(0);
   const current = q.questions[idx];
@@ -386,7 +398,7 @@ const GameSession = ({ sessionData, onExit }) => {
   const pin = sessionData.pin;
 
   useEffect(() => {
-    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', pin);
+    const docRef = doc(db, 'artifacts', appId, 'sessions', pin);
     const unsubscribe = onSnapshot(docRef, (s) => {
       if (s.exists()) setSnap(s.data());
     }, (err) => console.error("Session Sync Error:", err));
@@ -395,7 +407,7 @@ const GameSession = ({ sessionData, onExit }) => {
   }, [pin]);
 
   const update = (status, extra = {}) => {
-    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', pin);
+    const docRef = doc(db, 'artifacts', appId, 'sessions', pin);
     updateDoc(docRef, { status, ...extra, lastUpdated: serverTimestamp() });
   };
 
