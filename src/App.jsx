@@ -161,6 +161,10 @@ export default function App() {
         setPromise,
         new Promise((_, reject) => setTimeout(() => reject(new Error("Host timed out")), 5000))
       ]);
+
+      setActiveSession({ quizId: quiz.id, pin });
+      setView('GAME');
+      localStorage.setItem('mohoot_host_active', JSON.stringify({ quizId: quiz.id, pin }));
     } catch (error) {
       console.error("Hosting slow/offline:", error);
       alert("Game starting (Background Sync)");
