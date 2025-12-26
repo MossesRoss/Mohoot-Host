@@ -32,7 +32,6 @@ const envConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-console.log("Firebase Config Check:", envConfig);
 
 const firebaseConfig = (typeof __firebase_config !== 'undefined')
   ? JSON.parse(__firebase_config)
@@ -40,9 +39,7 @@ const firebaseConfig = (typeof __firebase_config !== 'undefined')
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-});
+const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'mohoot-prod';
 // --- CONFIGURATION END ---
 
