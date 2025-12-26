@@ -21,7 +21,7 @@ import {
   serverTimestamp,
   deleteDoc
 } from 'firebase/firestore';
-import { Plus, Trash2, LogOut, Loader2, Edit3, Image as ImageIcon, CheckCircle2, Trophy, Users, Play } from 'lucide-react';
+import { Plus, Trash2, LogOut, Loader2, Edit3, Image as ImageIcon, CheckCircle2, Trophy, Users, Play, XCircle } from 'lucide-react';
 
 const envConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -113,18 +113,25 @@ export default function App() {
     if (!user) return;
 
     setIsSaving(true);
+    console.log("Saving quiz...", q);
     try {
       const ref = collection(db, 'artifacts', appId, 'users', user.uid, 'quizzes');
-      if (q.id) {
-        const { id, ...data } = q;
-        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'quizzes', id), data);
-      } else {
-        await addDoc(ref, { ...q, createdAt: serverTimestamp() });
-      }
+      
+      const savePromise = q.id 
+        ? updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'quizzes', q.id), { ...q, questions: q.questions })
+        : addDoc(ref, { ...q, createdAt: serverTimestamp() });
+
+      // Timeout after 5 seconds
+      await Promise.race([
+        savePromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Save timed out. Check connection.")), 5000))
+      ]);
+      
+      console.log("Save successful");
       setView('DASHBOARD');
     } catch (error) {
       console.error("Save failed:", error);
-      alert("Failed to save quiz. Check console for details.");
+      alert("Failed to save quiz: " + error.message);
     } finally {
       setIsSaving(false);
     }
@@ -392,13 +399,18 @@ const Editor = ({ quiz, onSave, onCancel, isSaving }) => {
 
 const GameSession = ({ sessionData, onExit }) => {
   const [snap, setSnap] = useState(null);
+  const [error, setError] = useState(null);
   const pin = sessionData.pin;
 
   useEffect(() => {
     const docRef = doc(db, 'artifacts', appId, 'sessions', pin);
     const unsubscribe = onSnapshot(docRef, (s) => {
       if (s.exists()) setSnap(s.data());
-    }, (err) => console.error("Session Sync Error:", err));
+      else setError("Session not found (Check Firestore Permissions or Path)");
+    }, (err) => {
+      console.error("Session Sync Error:", err);
+      setError(err.message);
+    });
 
     return () => unsubscribe();
   }, [pin]);
@@ -421,6 +433,17 @@ const GameSession = ({ sessionData, onExit }) => {
       update('FINISHED');
     }
   };
+
+  if (error) return (
+    <div className="flex flex-col items-center justify-center p-20 text-red-500 h-full text-center">
+      <XCircle size={48} className="mb-4" />
+      <h3 className="text-xl font-bold mb-2">Connection Error</h3>
+      <p className="mb-6 max-w-md">{error}</p>
+      <button onClick={onExit} className="bg-gray-100 px-6 py-3 rounded-xl font-bold text-gray-600 hover:bg-gray-200">
+        Return to Dashboard
+      </button>
+    </div>
+  );
 
   if (!snap) return (
     <div className="flex flex-col items-center justify-center p-20 text-indigo-400 h-full">
