@@ -44,10 +44,10 @@ const THEME = {
 };
 
 const SHAPES = [
-  { id: 0, color: 'bg-rose-600' },
-  { id: 1, color: 'bg-blue-600' },
-  { id: 2, color: 'bg-amber-500' },
-  { id: 3, color: 'bg-emerald-600' },
+  { id: 0, color: 'bg-gradient-to-br from-rose-700 to-rose-900 border-rose-600/50' },
+  { id: 1, color: 'bg-gradient-to-br from-blue-700 to-blue-900 border-blue-600/50' },
+  { id: 2, color: 'bg-gradient-to-br from-amber-700 to-amber-900 border-amber-600/50' },
+  { id: 3, color: 'bg-gradient-to-br from-emerald-700 to-emerald-900 border-emerald-600/50' },
 ];
 
 const CARD_THEMES = [
@@ -58,7 +58,6 @@ const CARD_THEMES = [
 
 // --- COMPONENTS ---
 
-// Simple Confetti Component
 const Confetti = () => {
   const particles = Array.from({ length: 50 }).map((_, i) => ({
     left: Math.random() * 100 + '%',
@@ -94,23 +93,37 @@ export const QuizCard = ({ quiz, index, onHost, onEdit }) => {
   const style = CARD_THEMES[index % CARD_THEMES.length];
   return (
     <div
-      onDoubleClick={() => onEdit(quiz)}
-      className={`${style.bg} border ${style.border} ${style.glow} h-64 rounded-3xl p-6 relative flex flex-col items-center justify-between shadow-lg cursor-pointer hover:scale-[1.02] transition-all select-none group`}
+      onClick={() => onEdit(quiz)}
+      className={`${style.bg} border ${style.border} ${style.glow} h-64 rounded-3xl p-6 relative flex flex-col justify-between shadow-lg cursor-pointer hover:scale-[1.02] hover:shadow-2xl transition-all duration-300 select-none group overflow-hidden`}
     >
-      <div className={`absolute top-4 left-4 bg-white/5 border border-white/10 backdrop-blur-md font-bold px-3 py-1 rounded-full text-[10px] text-slate-300 uppercase tracking-widest`}>
-        {quiz.questions?.length || 0} Qs
-      </div>
-      <div className="flex-1 flex items-center justify-center w-full text-center mt-4 px-2">
+      {/* Title Section */}
+      <div className="flex-1 flex items-center justify-center w-full text-center px-2">
         <h3 className="font-bold text-2xl text-white leading-tight break-words line-clamp-3 group-hover:text-violet-200 transition-colors">
           {quiz.title || "Untitled"}
         </h3>
       </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); onHost(quiz); }}
-        className={`w-full py-4 rounded-xl font-bold text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all ${THEME.primaryGradient}`}
-      >
-        <Play size={18} fill="currentColor" /> HOST LIVE
-      </button>
+
+      {/* Footer: Metadata Left, Hidden Action Right */}
+      <div className="w-full flex items-center justify-between pt-4 border-t border-white/5 mt-2 relative z-10">
+        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest group-hover:text-slate-200 transition-colors">
+          {quiz.questions?.length || 0} Questions
+        </div>
+
+        {/* Button: Invisible & pushed down until hover */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onHost(quiz); }}
+          className={`
+            opacity-0 group-hover:opacity-100 
+            translate-y-4 group-hover:translate-y-0
+            transition-all duration-300 ease-out
+            p-3 rounded-xl shadow-lg hover:scale-110 active:scale-95 
+            ${THEME.primaryGradient} shadow-violet-500/30
+          `}
+          title="Host Live"
+        >
+          <Play size={20} fill="currentColor" className="ml-0.5" />
+        </button>
+      </div>
     </div>
   );
 };
@@ -118,7 +131,7 @@ export const QuizCard = ({ quiz, index, onHost, onEdit }) => {
 export const DashboardHeader = ({ user, onSignOut }) => (
   <nav className="bg-[#020617]/80 backdrop-blur-xl border-b border-white/5 px-8 py-5 flex justify-between items-center sticky top-0 z-20">
     <div className="font-black text-2xl tracking-tighter">
-      <span className="text-white">Mo</span><span className={THEME.textGradient}>hoot</span><span className="text-violet-500">.</span>
+      <span className="text-violet-500">M</span><span className={THEME.textGradient}>ohoot</span><span className="text-white">!</span>
     </div>
     <div className="flex items-center gap-4">
       <button onClick={onSignOut} className="relative group rounded-full transition-all focus:outline-none" title="Sign Out">
@@ -133,7 +146,7 @@ export const DashboardHeader = ({ user, onSignOut }) => (
 
 export const HostHeader = ({ onClose }) => (
   <div className="fixed top-0 left-0 right-0 p-6 flex justify-between items-center z-50 pointer-events-none">
-    <div className="font-black text-xl tracking-tighter text-white/20 pointer-events-auto select-none">M<span className="text-white/10">ohoot</span></div>
+    <div className="font-black text-xl tracking-tighter text-white/20 pointer-events-auto select-none">M<span className="text-white/10">ohoot</span><span className="text-white/30">!</span></div>
     <div className="pointer-events-auto group relative">
       <button onClick={onClose} className="bg-black/40 backdrop-blur border border-white/10 p-3 rounded-full text-slate-400 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/50 transition-all">
         <XCircle size={24} />
@@ -174,53 +187,40 @@ export const LobbyView = ({ pin, players, onStart, onClose }) => (
 export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
   const currentQ = snap.quizSnapshot.questions[snap.currentQuestionIndex];
   const [imgError, setImgError] = useState(false);
-
-  // FIX: Separate lock for finishing to prevent race conditions
   const [isFinishing, setIsFinishing] = useState(false);
-
-  // LOGIC: Snackbar State
   const [showSnackbar, setShowSnackbar] = useState(false);
   const [snackbarMsg, setSnackbarMsg] = useState("");
   const prevCountRef = useRef(0);
   const prevAnsweredIdsRef = useRef(new Set());
-  
-  // FIX: Count answers only for the current round
+
   const currentAnsweredPlayers = players.filter(p => p.lastAnsweredRoundId === snap.roundId);
   const answerCount = currentAnsweredPlayers.length;
 
-  // EFFECT: Handle Image Error reset
   useEffect(() => setImgError(false), [currentQ]);
 
-  // EFFECT: Detect new answers for Snackbar
   useEffect(() => {
-    // Only show if count increased and we aren't at 0
     if (answerCount > prevCountRef.current && answerCount > 0) {
-      const newAnswerer = currentAnsweredPlayers.find(p => !prevAnsweredIdsRef.current.has(p.uid || p.nickname)); // Fallback to nickname if uid missing in some contexts
-      
+      const newAnswerer = currentAnsweredPlayers.find(p => !prevAnsweredIdsRef.current.has(p.uid || p.nickname));
       if (newAnswerer) {
         setSnackbarMsg(`${newAnswerer.nickname} answered!`);
         setShowSnackbar(true);
-        const timer = setTimeout(() => setShowSnackbar(false), 3000); // Hide after 3s
+        const timer = setTimeout(() => setShowSnackbar(false), 3000);
         return () => clearTimeout(timer);
       }
     }
-    
-    // Update refs
     prevCountRef.current = answerCount;
     prevAnsweredIdsRef.current = new Set(currentAnsweredPlayers.map(p => p.uid || p.nickname));
   }, [answerCount, currentAnsweredPlayers]);
 
-  // EFFECT: Auto-Advance Logic (FIXED - Separated State & Action)
   useEffect(() => {
     if (players.length > 0 && answerCount === players.length && !isFinishing) {
-      setIsFinishing(true); // Lock it
+      setIsFinishing(true);
     }
   }, [answerCount, players.length, isFinishing]);
 
   useEffect(() => {
     if (isFinishing) {
       const t = setTimeout(() => {
-        // Force end time to now, which triggers the main loop to move to LEADERBOARD
         updateDoc(doc(db, 'artifacts', appId, 'sessions', snap.pin), { endTime: Date.now() });
       }, 1500);
       return () => clearTimeout(t);
@@ -231,24 +231,18 @@ export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
     <div className={`min-h-screen ${THEME.bg} relative flex flex-col`}>
       <HostHeader onClose={onClose} />
       <div className="flex-1 flex flex-col items-center pt-20 px-6 animate-in fade-in">
-
         <div className="w-full flex justify-between items-center max-w-6xl mb-8">
-          {/* FIX: Reduced Opacity for Q Indicator */}
           <div className="text-white/30 font-black text-2xl tracking-widest drop-shadow-sm">Q{snap.currentQuestionIndex + 1}</div>
-
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl opacity-50 blur group-hover:opacity-75 transition duration-1000"></div>
             <div className="relative text-5xl font-black text-white bg-[#020617] px-8 py-3 rounded-xl border border-white/10">
               {timeLeft}
             </div>
           </div>
-
-          {/* REPLACED: No number counter on right, empty div for spacing balance */}
           <div className="w-10"></div>
         </div>
 
         <div className="flex-1 w-full max-w-5xl flex flex-col items-center justify-center text-center pb-20">
-
           {currentQ.image && !imgError && (
             <div className="relative mb-8 group">
               <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl opacity-20 blur"></div>
@@ -273,7 +267,6 @@ export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
           </div>
         </div>
 
-        {/* NEW: Premium Snackbar */}
         {showSnackbar && (
           <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
             <div className="bg-[#0f172a]/90 backdrop-blur-xl border border-violet-500/30 text-white pl-6 pr-6 py-3 rounded-full shadow-[0_0_30px_rgba(124,58,237,0.3)] flex items-center gap-3">
@@ -282,7 +275,6 @@ export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
           </div>
         )}
 
-        {/* Skip button moved slightly to avoid snackbar overlap */}
         <div className="fixed bottom-6 right-6">
           <button onClick={onSkip} className="text-slate-500 hover:text-white px-6 py-3 font-bold text-sm uppercase tracking-wider transition-colors">Skip &raquo;</button>
         </div>
@@ -294,7 +286,6 @@ export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
 export const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
   const questionsLeft = snap.quizSnapshot.questions.length - (snap.currentQuestionIndex + 1);
   const isFinalStretch = questionsLeft < 3 && questionsLeft >= 0;
-
   const [timer, setTimer] = useState(5);
   const [paused, setPaused] = useState(false);
 
@@ -334,7 +325,6 @@ export const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
                 </div>
               )
             }
-
             return (
               <div key={i} className={`p-4 rounded-xl flex justify-between items-center border transition-all ${i === 0 ? 'bg-gradient-to-r from-yellow-500/10 to-transparent border-yellow-500/30' : 'bg-slate-900/50 border-white/5'}`}>
                 <div className="flex items-center gap-6">
@@ -375,11 +365,8 @@ export const FinishedView = ({ sortedPlayers, onClose }) => {
       <HostHeader onClose={onClose} />
       <Confetti />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-violet-900/20 via-slate-950 to-slate-950 pointer-events-none"></div>
-      
-      <div className="relative z-20 mb-8 text-center animate-in slide-in-from-top-10 duration-1000">
-         <div className="text-yellow-400 font-black text-lg tracking-[0.5em] uppercase mb-2">The Champions</div>
-         <h1 className="text-6xl font-black text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.3)]">PODIUM</h1>
-      </div>
+
+      {/* REMOVED: "The Champions/MVP/PODIUM" Header Text Block */}
 
       <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-5xl px-4 mb-20 relative z-10">
         {top3[1] && (
@@ -404,7 +391,7 @@ export const FinishedView = ({ sortedPlayers, onClose }) => {
               <span className="text-8xl font-black text-white drop-shadow-xl relative z-10">1</span>
             </div>
             <div className="mt-6 font-black text-3xl text-yellow-400 bg-yellow-900/10 px-8 py-3 rounded-2xl border border-yellow-500/20 backdrop-blur-md shadow-[0_0_30px_rgba(234,179,8,0.2)]">
-                {top3[0].score}
+              {top3[0].score}
             </div>
           </div>
         )}
@@ -518,25 +505,21 @@ export default function App() {
   );
 }
 
-// --- EDITOR WITH SIDEBAR FIX ---
+// --- EDITOR WITH IMAGE FIX ---
 const Editor = ({ user, quiz, onSave, onCancel }) => {
   const [q, setQ] = useState(quiz);
   const [idx, setIdx] = useState(0);
+  const [previewError, setPreviewError] = useState(false);
   const current = q.questions[idx];
+
+  useEffect(() => {
+    setPreviewError(false);
+  }, [current.image, idx]);
 
   const update = (field, val) => {
     const qs = [...q.questions];
     qs[idx] = { ...current, [field]: val };
     setQ({ ...q, questions: qs });
-  };
-  
-  // FIX: Better image handling
-  const handleImagePaste = (e) => {
-    const clipboardData = e.clipboardData || window.clipboardData;
-    const pastedData = clipboardData.getData('Text');
-    if (pastedData) {
-        update('image', pastedData);
-    }
   };
 
   const addQuestion = () => {
@@ -578,23 +561,34 @@ const Editor = ({ user, quiz, onSave, onCancel }) => {
               <label className="text-xs font-bold text-slate-500 uppercase block tracking-wider">Settings</label>
               <div className={`${THEME.input} flex flex-col gap-3 p-4 rounded-xl`}>
                 <div className="flex items-center gap-3">
-                    <ImageIcon size={20} className="text-violet-400" />
-                    <input 
-                        className="bg-transparent w-full outline-none text-sm text-white placeholder-slate-600" 
-                        value={current.image || ''} 
-                        onChange={e => update('image', e.target.value)} 
-                        onPaste={handleImagePaste}
-                        placeholder="Paste Image Link Here" 
-                    />
+                  <ImageIcon size={20} className="text-violet-400" />
+                  <input
+                    className="bg-transparent w-full outline-none text-sm text-white placeholder-slate-600"
+                    value={current.image || ''}
+                    onChange={e => update('image', e.target.value)}
+                    placeholder="Paste Direct Image Link (Right Click Image -> Copy Image Address)" // Updated placeholder
+                  />
                 </div>
-                {/* Image Preview for Verification */}
                 {current.image && (
-                    <div className="relative mt-2 w-full h-32 bg-black/20 rounded-lg overflow-hidden border border-white/5 group">
-                        <img src={current.image} className="w-full h-full object-contain" onError={(e) => { e.target.style.display='none'; }} />
-                        <div className="absolute inset-0 flex items-center justify-center text-xs text-rose-400 font-bold bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity">
-                           Preview
-                        </div>
-                    </div>
+                  <div className="relative mt-2 w-full h-32 bg-black/20 rounded-lg overflow-hidden border border-white/5 group flex items-center justify-center">
+                    {!previewError ? (
+                      <img
+                        src={current.image}
+                        className="w-full h-full object-contain"
+                        onError={() => setPreviewError(true)}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center text-rose-500">
+                        <Sparkles size={16} className="mb-1" />
+                        <span className="text-[10px] font-bold uppercase">Invalid URL</span>
+                      </div>
+                    )}
+                    {!previewError && (
+                      <div className="absolute inset-0 flex items-center justify-center text-xs text-white font-bold bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
+                        Preview
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               <div className={`${THEME.input} p-4 rounded-xl`}>
