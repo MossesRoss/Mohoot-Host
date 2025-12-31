@@ -58,6 +58,38 @@ const CARD_THEMES = [
 
 // --- COMPONENTS ---
 
+// Simple Confetti Component
+const Confetti = () => {
+  const particles = Array.from({ length: 50 }).map((_, i) => ({
+    left: Math.random() * 100 + '%',
+    animationDelay: Math.random() * 5 + 's',
+    backgroundColor: ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'][Math.floor(Math.random() * 5)]
+  }));
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+      {particles.map((p, i) => (
+        <div
+          key={i}
+          className="absolute top-0 w-3 h-3 rounded-full animate-[fall_5s_linear_infinite]"
+          style={{
+            left: p.left,
+            animationDelay: p.animationDelay,
+            backgroundColor: p.backgroundColor,
+            opacity: 0.7
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes fall {
+          0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
 export const QuizCard = ({ quiz, index, onHost, onEdit }) => {
   const style = CARD_THEMES[index % CARD_THEMES.length];
   return (
@@ -339,36 +371,50 @@ export const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
 export const FinishedView = ({ sortedPlayers, onClose }) => {
   const top3 = sortedPlayers.slice(0, 3);
   return (
-    <div className={`min-h-screen ${THEME.bg} flex flex-col items-center justify-center pt-10`}>
+    <div className={`min-h-screen ${THEME.bg} flex flex-col items-center justify-center pt-10 overflow-hidden relative`}>
       <HostHeader onClose={onClose} />
+      <Confetti />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-violet-900/20 via-slate-950 to-slate-950 pointer-events-none"></div>
-      <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-4xl px-4 mb-20 relative z-10">
+      
+      <div className="relative z-20 mb-8 text-center animate-in slide-in-from-top-10 duration-1000">
+         <div className="text-yellow-400 font-black text-lg tracking-[0.5em] uppercase mb-2">The Champions</div>
+         <h1 className="text-6xl font-black text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.3)]">PODIUM</h1>
+      </div>
+
+      <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-5xl px-4 mb-20 relative z-10">
         {top3[1] && (
           <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom-20 duration-[1500ms]">
             <div className="text-xl font-black text-slate-400 mb-4">{top3[1].nickname}</div>
-            <div className="w-full h-40 bg-slate-800 rounded-t-2xl flex items-end justify-center pb-4 border-t border-slate-600 relative shadow-2xl">
+            <div className="w-full h-44 bg-slate-800 rounded-t-2xl flex items-end justify-center pb-4 border-t border-slate-600 relative shadow-2xl">
               <span className="text-5xl font-black text-white/10">2</span>
+              <div className="absolute top-0 inset-x-0 h-1 bg-slate-500 shadow-[0_0_20px_rgba(100,116,139,0.5)]"></div>
             </div>
-            <div className="mt-4 font-bold text-slate-500">{top3[1].score}</div>
+            <div className="mt-4 font-bold text-slate-500">{top3[1].score} pts</div>
           </div>
         )}
         {top3[0] && (
           <div className="flex flex-col items-center w-1/3 -mt-10 z-10 animate-in slide-in-from-bottom-32 duration-[2000ms]">
-            <Trophy size={64} className="text-yellow-400 mb-6 drop-shadow-[0_0_35px_rgba(250,204,21,0.5)]" fill="currentColor" />
-            <div className="text-3xl font-black text-white mb-4 tracking-tight">{top3[0].nickname}</div>
-            <div className="w-full h-64 bg-gradient-to-b from-yellow-500 to-yellow-700 rounded-t-3xl flex items-end justify-center pb-6 border-t-4 border-yellow-300 shadow-[0_0_50px_rgba(234,179,8,0.2)]">
-              <span className="text-7xl font-black text-white drop-shadow-md">1</span>
+            <div className="relative">
+              <Trophy size={80} className="text-yellow-400 mb-6 drop-shadow-[0_0_50px_rgba(250,204,21,0.6)] animate-bounce" fill="currentColor" />
+              <div className="absolute -top-10 -right-10 bg-yellow-500 text-black font-black text-xs px-2 py-1 rounded rotate-12">MVP!</div>
             </div>
-            <div className="mt-6 font-black text-2xl text-yellow-400 bg-yellow-900/10 px-6 py-2 rounded-xl border border-yellow-500/20">{top3[0].score}</div>
+            <div className="text-4xl font-black text-white mb-4 tracking-tight drop-shadow-md">{top3[0].nickname}</div>
+            <div className="w-full h-72 bg-gradient-to-b from-yellow-500 to-yellow-700 rounded-t-3xl flex items-end justify-center pb-6 border-t-4 border-yellow-300 shadow-[0_0_80px_rgba(234,179,8,0.4)] relative overflow-hidden">
+              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20 mix-blend-overlay"></div>
+              <span className="text-8xl font-black text-white drop-shadow-xl relative z-10">1</span>
+            </div>
+            <div className="mt-6 font-black text-3xl text-yellow-400 bg-yellow-900/10 px-8 py-3 rounded-2xl border border-yellow-500/20 backdrop-blur-md shadow-[0_0_30px_rgba(234,179,8,0.2)]">
+                {top3[0].score}
+            </div>
           </div>
         )}
         {top3[2] && (
           <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom-16 duration-[1200ms]">
             <div className="text-xl font-black text-amber-700 mb-4">{top3[2].nickname}</div>
-            <div className="w-full h-32 bg-amber-900/20 rounded-t-2xl flex items-end justify-center pb-4 border-t border-amber-800 relative">
+            <div className="w-full h-36 bg-amber-900/20 rounded-t-2xl flex items-end justify-center pb-4 border-t border-amber-800 relative shadow-xl">
               <span className="text-5xl font-black text-white/10">3</span>
             </div>
-            <div className="mt-4 font-bold text-slate-500">{top3[2].score}</div>
+            <div className="mt-4 font-bold text-slate-500">{top3[2].score} pts</div>
           </div>
         )}
       </div>
@@ -483,6 +529,15 @@ const Editor = ({ user, quiz, onSave, onCancel }) => {
     qs[idx] = { ...current, [field]: val };
     setQ({ ...q, questions: qs });
   };
+  
+  // FIX: Better image handling
+  const handleImagePaste = (e) => {
+    const clipboardData = e.clipboardData || window.clipboardData;
+    const pastedData = clipboardData.getData('Text');
+    if (pastedData) {
+        update('image', pastedData);
+    }
+  };
 
   const addQuestion = () => {
     setQ({ ...q, questions: [...q.questions, { text: "", image: "", answers: ["", "", "", ""], correct: 0, duration: 20 }] });
@@ -521,9 +576,26 @@ const Editor = ({ user, quiz, onSave, onCancel }) => {
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-4">
               <label className="text-xs font-bold text-slate-500 uppercase block tracking-wider">Settings</label>
-              <div className={`${THEME.input} flex items-center gap-3 p-4 rounded-xl`}>
-                <ImageIcon size={20} className="text-violet-400" />
-                <input className="bg-transparent w-full outline-none text-sm text-white placeholder-slate-600" value={current.image || ''} onChange={e => update('image', e.target.value)} placeholder="Image URL (Optional)" />
+              <div className={`${THEME.input} flex flex-col gap-3 p-4 rounded-xl`}>
+                <div className="flex items-center gap-3">
+                    <ImageIcon size={20} className="text-violet-400" />
+                    <input 
+                        className="bg-transparent w-full outline-none text-sm text-white placeholder-slate-600" 
+                        value={current.image || ''} 
+                        onChange={e => update('image', e.target.value)} 
+                        onPaste={handleImagePaste}
+                        placeholder="Paste Image Link Here" 
+                    />
+                </div>
+                {/* Image Preview for Verification */}
+                {current.image && (
+                    <div className="relative mt-2 w-full h-32 bg-black/20 rounded-lg overflow-hidden border border-white/5 group">
+                        <img src={current.image} className="w-full h-full object-contain" onError={(e) => { e.target.style.display='none'; }} />
+                        <div className="absolute inset-0 flex items-center justify-center text-xs text-rose-400 font-bold bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity">
+                           Preview
+                        </div>
+                    </div>
+                )}
               </div>
               <div className={`${THEME.input} p-4 rounded-xl`}>
                 <span className="text-xs font-bold text-slate-500 block mb-1">Duration (Seconds)</span>
