@@ -58,7 +58,7 @@ const CARD_THEMES = [
 
 // --- COMPONENTS ---
 
-const QuizCard = ({ quiz, index, onHost, onEdit }) => {
+export const QuizCard = ({ quiz, index, onHost, onEdit }) => {
   const style = CARD_THEMES[index % CARD_THEMES.length];
   return (
     <div
@@ -83,7 +83,7 @@ const QuizCard = ({ quiz, index, onHost, onEdit }) => {
   );
 };
 
-const DashboardHeader = ({ user, onSignOut }) => (
+export const DashboardHeader = ({ user, onSignOut }) => (
   <nav className="bg-[#020617]/80 backdrop-blur-xl border-b border-white/5 px-8 py-5 flex justify-between items-center sticky top-0 z-20">
     <div className="font-black text-2xl tracking-tighter">
       <span className="text-white">Mo</span><span className={THEME.textGradient}>hoot</span><span className="text-violet-500">.</span>
@@ -99,7 +99,7 @@ const DashboardHeader = ({ user, onSignOut }) => (
   </nav>
 );
 
-const HostHeader = ({ onClose }) => (
+export const HostHeader = ({ onClose }) => (
   <div className="fixed top-0 left-0 right-0 p-6 flex justify-between items-center z-50 pointer-events-none">
     <div className="font-black text-xl tracking-tighter text-white/20 pointer-events-auto select-none">M<span className="text-white/10">ohoot</span></div>
     <div className="pointer-events-auto group relative">
@@ -112,7 +112,7 @@ const HostHeader = ({ onClose }) => (
 
 // --- GAME VIEWS ---
 
-const LobbyView = ({ pin, players, onStart, onClose }) => (
+export const LobbyView = ({ pin, players, onStart, onClose }) => (
   <div className={`min-h-screen ${THEME.bg} flex flex-col items-center justify-center relative overflow-hidden`}>
     <HostHeader onClose={onClose} />
     <div className="absolute top-0 -left-40 w-96 h-96 bg-violet-600/20 rounded-full blur-[128px]"></div>
@@ -139,7 +139,7 @@ const LobbyView = ({ pin, players, onStart, onClose }) => (
   </div>
 );
 
-const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
+export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
   const currentQ = snap.quizSnapshot.questions[snap.currentQuestionIndex];
   const [imgError, setImgError] = useState(false);
 
@@ -148,9 +148,13 @@ const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
 
   // LOGIC: Snackbar State
   const [showSnackbar, setShowSnackbar] = useState(false);
+  const [snackbarMsg, setSnackbarMsg] = useState("");
   const prevCountRef = useRef(0);
+  const prevAnsweredIdsRef = useRef(new Set());
+  
   // FIX: Count answers only for the current round
-  const answerCount = players.filter(p => p.lastAnsweredRoundId === snap.roundId).length;
+  const currentAnsweredPlayers = players.filter(p => p.lastAnsweredRoundId === snap.roundId);
+  const answerCount = currentAnsweredPlayers.length;
 
   // EFFECT: Handle Image Error reset
   useEffect(() => setImgError(false), [currentQ]);
@@ -159,24 +163,37 @@ const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
   useEffect(() => {
     // Only show if count increased and we aren't at 0
     if (answerCount > prevCountRef.current && answerCount > 0) {
-      setShowSnackbar(true);
-      const timer = setTimeout(() => setShowSnackbar(false), 3000); // Hide after 3s
-      return () => clearTimeout(timer);
+      const newAnswerer = currentAnsweredPlayers.find(p => !prevAnsweredIdsRef.current.has(p.uid || p.nickname)); // Fallback to nickname if uid missing in some contexts
+      
+      if (newAnswerer) {
+        setSnackbarMsg(`${newAnswerer.nickname} answered!`);
+        setShowSnackbar(true);
+        const timer = setTimeout(() => setShowSnackbar(false), 3000); // Hide after 3s
+        return () => clearTimeout(timer);
+      }
     }
+    
+    // Update refs
     prevCountRef.current = answerCount;
-  }, [answerCount]);
+    prevAnsweredIdsRef.current = new Set(currentAnsweredPlayers.map(p => p.uid || p.nickname));
+  }, [answerCount, currentAnsweredPlayers]);
 
-  // EFFECT: Auto-Advance Logic (FIXED)
+  // EFFECT: Auto-Advance Logic (FIXED - Separated State & Action)
   useEffect(() => {
     if (players.length > 0 && answerCount === players.length && !isFinishing) {
-      setIsFinishing(true); // Lock it immediately
+      setIsFinishing(true); // Lock it
+    }
+  }, [answerCount, players.length, isFinishing]);
+
+  useEffect(() => {
+    if (isFinishing) {
       const t = setTimeout(() => {
         // Force end time to now, which triggers the main loop to move to LEADERBOARD
         updateDoc(doc(db, 'artifacts', appId, 'sessions', snap.pin), { endTime: Date.now() });
       }, 1500);
       return () => clearTimeout(t);
     }
-  }, [answerCount, players.length, isFinishing, snap.pin]);
+  }, [isFinishing, snap.pin]);
 
   return (
     <div className={`min-h-screen ${THEME.bg} relative flex flex-col`}>
@@ -227,11 +244,8 @@ const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
         {/* NEW: Premium Snackbar */}
         {showSnackbar && (
           <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
-            <div className="bg-[#0f172a]/90 backdrop-blur-xl border border-violet-500/30 text-white pl-4 pr-6 py-3 rounded-full shadow-[0_0_30px_rgba(124,58,237,0.3)] flex items-center gap-3">
-              <div className="bg-gradient-to-r from-violet-600 to-fuchsia-600 p-2 rounded-full">
-                <Sparkles size={16} className="text-white" />
-              </div>
-              <span className="font-bold text-sm tracking-wide">Someone answered!</span>
+            <div className="bg-[#0f172a]/90 backdrop-blur-xl border border-violet-500/30 text-white pl-6 pr-6 py-3 rounded-full shadow-[0_0_30px_rgba(124,58,237,0.3)] flex items-center gap-3">
+              <span className="font-bold text-sm tracking-wide">{snackbarMsg}</span>
             </div>
           </div>
         )}
@@ -245,7 +259,7 @@ const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
   );
 };
 
-const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
+export const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
   const questionsLeft = snap.quizSnapshot.questions.length - (snap.currentQuestionIndex + 1);
   const isFinalStretch = questionsLeft < 3 && questionsLeft >= 0;
 
@@ -322,7 +336,7 @@ const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
   );
 };
 
-const FinishedView = ({ sortedPlayers, onClose }) => {
+export const FinishedView = ({ sortedPlayers, onClose }) => {
   const top3 = sortedPlayers.slice(0, 3);
   return (
     <div className={`min-h-screen ${THEME.bg} flex flex-col items-center justify-center pt-10`}>
