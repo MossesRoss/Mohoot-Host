@@ -149,7 +149,8 @@ const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
   // LOGIC: Snackbar State
   const [showSnackbar, setShowSnackbar] = useState(false);
   const prevCountRef = useRef(0);
-  const answerCount = players.filter(p => p.lastAnswerIdx !== undefined).length;
+  // FIX: Count answers only for the current round
+  const answerCount = players.filter(p => p.lastAnsweredRoundId === snap.roundId).length;
 
   // EFFECT: Handle Image Error reset
   useEffect(() => setImgError(false), [currentQ]);
