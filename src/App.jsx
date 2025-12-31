@@ -139,6 +139,185 @@ const HostHeader = ({ onClose }) => (
   </div>
 );
 
+// --- SUB-COMPONENTS FOR GAME VIEWS ---
+
+const LobbyView = ({ pin, players, onStart, onClose }) => (
+  <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center relative overflow-hidden">
+    <HostHeader onClose={onClose} />
+    <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
+    
+    <div className="bg-slate-800/80 backdrop-blur-xl p-10 rounded-[3rem] shadow-2xl border border-slate-700 flex flex-col items-center text-center relative z-10 mb-10">
+      <div className="text-sm font-black text-indigo-400 uppercase tracking-[0.4em] mb-4">Game PIN</div>
+      <div className="text-[8rem] font-black leading-none text-white tabular-nums tracking-tighter drop-shadow-2xl">{pin}</div>
+      <div className="mt-8 flex items-center gap-4 text-slate-400 font-bold">
+         <Users size={20} /> {players.length} Players Joined
+      </div>
+    </div>
+
+    <div className="flex flex-wrap gap-4 justify-center max-w-5xl mb-20 relative z-10">
+      {players.map((p, i) => (
+        <div key={i} className="bg-slate-800 px-6 py-3 rounded-xl shadow-lg border border-slate-700 font-black text-lg text-cyan-400 animate-in zoom-in">{p.nickname}</div>
+      ))}
+    </div>
+
+    <div className="fixed bottom-10 z-20">
+       <button
+        disabled={players.length === 0}
+        onClick={onStart}
+        className={`px-12 py-5 rounded-2xl font-black text-2xl shadow-xl transition-all ${players.length > 0 ? 'bg-indigo-600 text-white hover:scale-105' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
+      >
+        Start Game
+      </button>
+    </div>
+  </div>
+);
+
+const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
+  const currentQ = snap.quizSnapshot.questions[snap.currentQuestionIndex];
+  return (
+    <div className="min-h-screen bg-slate-900 relative flex flex-col">
+      <HostHeader onClose={onClose} />
+      <div className="flex-1 flex flex-col items-center pt-24 px-6 animate-in fade-in">
+        <div className="w-full flex justify-between items-center max-w-6xl mb-8">
+           <div className="text-indigo-400 font-bold text-xl">Q {snap.currentQuestionIndex + 1}</div>
+           <div className="text-5xl font-black text-white bg-slate-800 px-8 py-2 rounded-2xl shadow-lg border border-slate-700">{timeLeft}</div>
+           <div className="text-slate-400 font-bold text-xl">{players.filter(p => p.lastAnswerIdx !== undefined).length} Answers</div>
+        </div>
+
+        <div className="flex-1 w-full max-w-5xl flex flex-col items-center justify-center text-center pb-20">
+          {currentQ.image && <img src={currentQ.image} className="h-56 object-contain rounded-2xl shadow-2xl mb-8 bg-black/20" />}
+          <h2 className="text-4xl md:text-5xl font-black text-white leading-tight mb-12">{currentQ.text}</h2>
+          
+          <div className="grid grid-cols-2 gap-6 w-full">
+            {currentQ.answers.map((a, i) => (
+              <div key={i} className={`${SHAPES[i].color} p-6 rounded-2xl text-white text-2xl font-black flex items-center shadow-lg border-4 border-white/10`}>
+                <span className="w-10 h-10 rounded-lg bg-black/20 flex items-center justify-center mr-4 text-lg">{i + 1}</span>
+                {a}
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        <div className="fixed bottom-6 right-6">
+           <button onClick={onSkip} className="bg-slate-800 text-indigo-400 px-6 py-3 rounded-xl font-bold hover:bg-slate-700">Skip Timer</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
+  // HOOKS ARE NOW SAFE HERE because this component only mounts when needed
+  const isFinalStretch = (snap.quizSnapshot.questions.length - (snap.currentQuestionIndex + 1)) < 3;
+  const playersToShow = isFinalStretch ? sortedPlayers.slice(5) : sortedPlayers;
+  const [timer, setTimer] = useState(5);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+      if (timer > 0 && !paused) {
+          const t = setTimeout(() => setTimer(t => t - 1), 1000);
+          return () => clearTimeout(t);
+      } else if (timer === 0 && !paused) {
+          onNext();
+      }
+  }, [timer, paused]);
+
+  const handleBtnClick = () => {
+      if (!paused && timer > 0) {
+          setPaused(true); 
+      } else {
+          onNext(); 
+      }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-900 pt-20 px-6 relative">
+      <HostHeader onClose={onClose} />
+      <div className="max-w-3xl mx-auto pt-10 animate-in slide-in-from-bottom-8">
+        <div className="text-center mb-10">
+           <Trophy size={64} className="mx-auto text-yellow-500 mb-4 drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]" />
+           <h2 className="text-5xl font-black text-white">Current Ranking</h2>
+        </div>
+
+        <div className="space-y-3 mb-20">
+          {playersToShow.map((p, i) => {
+            const rank = isFinalStretch ? i + 5 : i;
+            return (
+              <div key={i} className={`p-5 rounded-2xl flex justify-between items-center ${rank === 0 ? 'bg-yellow-500/10 border border-yellow-500/50' : 'bg-slate-800 border border-slate-700'}`}>
+                <div className="flex items-center gap-6">
+                  <span className={`font-black text-2xl w-12 text-center flex justify-center ${rank === 0 ? 'text-yellow-400' : 'text-slate-500'}`}>{rank === 0 ? <Trophy size={24}/> : `#${rank+1}`}</span>
+                  <span className="font-bold text-2xl text-white">{p.nickname}</span>
+                </div>
+                <span className="font-mono font-black text-2xl text-cyan-400">{p.score}</span>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="fixed bottom-10 inset-x-0 flex justify-center">
+          <button 
+              onClick={handleBtnClick} 
+              className="group relative bg-indigo-600 text-white pl-8 pr-10 py-4 rounded-2xl font-black text-xl shadow-2xl shadow-indigo-500/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-3 overflow-hidden"
+          >
+              <span className="relative z-10">
+                  {(!paused && timer > 0) ? `Auto Next (${timer}s)` : "Next Round"}
+              </span>
+              <Play size={20} fill="currentColor" className="relative z-10" />
+              {(!paused && timer > 0) && (
+                 <div className="absolute bottom-0 left-0 h-1 bg-white/30 transition-all duration-1000 ease-linear w-full" style={{ width: `${(timer/5)*100}%` }} />
+              )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const FinishedView = ({ sortedPlayers, onClose }) => {
+  const top3 = sortedPlayers.slice(0, 3);
+  return (
+    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center pt-10">
+      <HostHeader onClose={onClose} />
+      
+      <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-4xl px-4 mb-20">
+        {/* 2nd Place */}
+        {top3[1] && (
+          <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom-20 duration-[1500ms]">
+             <div className="text-2xl font-black text-slate-400 mb-4">{top3[1].nickname}</div>
+             <div className="w-full h-40 bg-slate-700 rounded-t-2xl flex items-end justify-center pb-4 border-t-4 border-slate-500 relative">
+               <span className="text-5xl font-black text-white/10">2</span>
+             </div>
+             <div className="mt-4 font-bold text-slate-500">{top3[1].score} pts</div>
+          </div>
+        )}
+
+        {/* 1st Place */}
+        {top3[0] && (
+          <div className="flex flex-col items-center w-1/3 -mt-10 z-10 animate-in slide-in-from-bottom-32 duration-[2000ms]">
+             <Trophy size={64} className="text-yellow-400 mb-6 drop-shadow-[0_0_25px_rgba(250,204,21,0.6)]" fill="currentColor" />
+             <div className="text-4xl font-black text-white mb-4">{top3[0].nickname}</div>
+             <div className="w-full h-64 bg-gradient-to-b from-yellow-600 to-yellow-800 rounded-t-3xl flex items-end justify-center pb-6 border-t-4 border-yellow-400 shadow-2xl shadow-yellow-900/40">
+               <span className="text-7xl font-black text-white text-shadow-lg">1</span>
+             </div>
+             <div className="mt-6 font-black text-3xl text-yellow-400 bg-yellow-900/20 px-6 py-2 rounded-xl border border-yellow-500/20">{top3[0].score} pts</div>
+          </div>
+        )}
+
+        {/* 3rd Place */}
+        {top3[2] && (
+          <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom-16 duration-[1200ms]">
+             <div className="text-2xl font-black text-amber-700 mb-4">{top3[2].nickname}</div>
+             <div className="w-full h-32 bg-amber-900/40 rounded-t-2xl flex items-end justify-center pb-4 border-t-4 border-amber-700 relative">
+               <span className="text-5xl font-black text-white/10">3</span>
+             </div>
+             <div className="mt-4 font-bold text-slate-500">{top3[2].score} pts</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // --- MAIN COMPONENT ---
 export default function App() {
   const [user, setUser] = useState(null);
@@ -439,22 +618,22 @@ const Editor = ({ user, quiz, onSave, onCancel, isSaving }) => {
   );
 };
 
-// --- GAME SESSION COMPONENT ---
+
 const GameSession = ({ user, sessionData, onExit }) => {
   const [snap, setSnap] = useState(null);
   const [error, setError] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(0);
   const [isCleaning, setIsCleaning] = useState(false);
   const pin = sessionData.pin;
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin),
+    const unsub = onSnapshot(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), 
       (s) => s.exists() ? setSnap(s.data()) : setError("Session ended"),
       (err) => setError(err.message)
     );
     return () => unsub();
   }, [pin]);
 
-  const [timeLeft, setTimeLeft] = useState(0);
   useEffect(() => {
     if (snap?.status === 'QUESTION' && snap.endTime) {
       const timer = setInterval(() => {
@@ -475,7 +654,7 @@ const GameSession = ({ user, sessionData, onExit }) => {
     setIsCleaning(true);
     try {
       await deleteDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin));
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); } 
     finally { onExit(); }
   };
 
@@ -485,7 +664,7 @@ const GameSession = ({ user, sessionData, onExit }) => {
     if (q) {
       update('QUESTION', {
         currentQuestionIndex: nIdx,
-        roundId: Date.now(),
+        roundId: Date.now(), 
         startTime: Date.now() + 2000,
         endTime: Date.now() + 2000 + (q.duration * 1000)
       });
@@ -501,177 +680,41 @@ const GameSession = ({ user, sessionData, onExit }) => {
   const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
   const currentQ = snap.quizSnapshot.questions[snap.currentQuestionIndex];
 
-  if (snap.status === 'LOBBY') return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center relative overflow-hidden">
-      <HostHeader onClose={gracefulShutdown} />
-      <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
+  // RENDER: Clean separation of concerns prevents Hook errors
+  if (snap.status === 'LOBBY') {
+    return <LobbyView 
+      pin={pin} 
+      players={players} 
+      onStart={() => update('QUESTION', { roundId: Date.now(), startTime: Date.now() + 2000, endTime: Date.now() + 2000 + (currentQ.duration * 1000) })}
+      onClose={gracefulShutdown} 
+    />;
+  }
 
-      <div className="bg-slate-800/80 backdrop-blur-xl p-10 rounded-[3rem] shadow-2xl border border-slate-700 flex flex-col items-center text-center relative z-10 mb-10">
-        <div className="text-sm font-black text-indigo-400 uppercase tracking-[0.4em] mb-4">Game PIN</div>
-        <div className="text-[8rem] font-black leading-none text-white tabular-nums tracking-tighter drop-shadow-2xl">{pin}</div>
-        <div className="mt-8 flex items-center gap-4 text-slate-400 font-bold">
-          <Users size={20} /> {players.length} Players Joined
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-4 justify-center max-w-5xl mb-20 relative z-10">
-        {players.map((p, i) => (
-          <div key={i} className="bg-slate-800 px-6 py-3 rounded-xl shadow-lg border border-slate-700 font-black text-lg text-cyan-400 animate-in zoom-in">{p.nickname}</div>
-        ))}
-      </div>
-
-      <div className="fixed bottom-10 z-20">
-        <button
-          disabled={players.length === 0}
-          onClick={() => update('QUESTION', { roundId: Date.now(), startTime: Date.now() + 2000, endTime: Date.now() + 2000 + (currentQ.duration * 1000) })}
-          className={`px-12 py-5 rounded-2xl font-black text-2xl shadow-xl transition-all ${players.length > 0 ? 'bg-indigo-600 text-white hover:scale-105' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
-        >
-          Start Game
-        </button>
-      </div>
-    </div>
-  );
-
-  if (snap.status === 'QUESTION') return (
-    <div className="min-h-screen bg-slate-900 relative flex flex-col">
-      <HostHeader onClose={gracefulShutdown} />
-      <div className="flex-1 flex flex-col items-center pt-24 px-6 animate-in fade-in">
-        <div className="w-full flex justify-between items-center max-w-6xl mb-8">
-          <div className="text-indigo-400 font-bold text-xl">Q {snap.currentQuestionIndex + 1}</div>
-          <div className="text-5xl font-black text-white bg-slate-800 px-8 py-2 rounded-2xl shadow-lg border border-slate-700">{timeLeft}</div>
-          <div className="text-slate-400 font-bold text-xl">{players.filter(p => p.lastAnswerIdx !== undefined).length} Answers</div>
-        </div>
-
-        <div className="flex-1 w-full max-w-5xl flex flex-col items-center justify-center text-center pb-20">
-          {currentQ.image && <img src={currentQ.image} className="h-56 object-contain rounded-2xl shadow-2xl mb-8 bg-black/20" />}
-          <h2 className="text-4xl md:text-5xl font-black text-white leading-tight mb-12">{currentQ.text}</h2>
-
-          <div className="grid grid-cols-2 gap-6 w-full">
-            {currentQ.answers.map((a, i) => (
-              <div key={i} className={`${SHAPES[i].color} p-6 rounded-2xl text-white text-2xl font-black flex items-center shadow-lg border-4 border-white/10`}>
-                <span className="w-10 h-10 rounded-lg bg-black/20 flex items-center justify-center mr-4 text-lg">{i + 1}</span>
-                {a}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="fixed bottom-6 right-6">
-          <button onClick={() => update('LEADERBOARD')} className="bg-slate-800 text-indigo-400 px-6 py-3 rounded-xl font-bold hover:bg-slate-700">Skip Timer</button>
-        </div>
-      </div>
-    </div>
-  );
+  if (snap.status === 'QUESTION') {
+    return <QuestionView 
+      snap={snap} 
+      players={players} 
+      timeLeft={timeLeft} 
+      onSkip={() => update('LEADERBOARD')}
+      onClose={gracefulShutdown}
+    />;
+  }
 
   if (snap.status === 'LEADERBOARD') {
-    const isFinalStretch = (snap.quizSnapshot.questions.length - (snap.currentQuestionIndex + 1)) < 3;
-    const playersToShow = isFinalStretch ? sortedPlayers.slice(5) : sortedPlayers;
-
-    const [timer, setTimer] = useState(5);
-    const [paused, setPaused] = useState(false);
-
-    useEffect(() => {
-      if (timer > 0 && !paused) {
-        const t = setTimeout(() => setTimer(t => t - 1), 1000);
-        return () => clearTimeout(t);
-      } else if (timer === 0 && !paused) {
-        next();
-      }
-    }, [timer, paused]);
-
-    const handleBtnClick = () => {
-      if (!paused && timer > 0) {
-        setPaused(true);
-      } else {
-        next();
-      }
-    };
-
-    return (
-      <div className="min-h-screen bg-slate-900 pt-20 px-6 relative">
-        <HostHeader onClose={gracefulShutdown} />
-        <div className="max-w-3xl mx-auto pt-10 animate-in slide-in-from-bottom-8">
-          <div className="text-center mb-10">
-            <Trophy size={64} className="mx-auto text-yellow-500 mb-4 drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]" />
-            <h2 className="text-5xl font-black text-white">Current Ranking</h2>
-          </div>
-
-          <div className="space-y-3 mb-20">
-            {playersToShow.map((p, i) => {
-              const rank = isFinalStretch ? i + 5 : i;
-              return (
-                <div key={i} className={`p-5 rounded-2xl flex justify-between items-center ${rank === 0 ? 'bg-yellow-500/10 border border-yellow-500/50' : 'bg-slate-800 border border-slate-700'}`}>
-                  <div className="flex items-center gap-6">
-                    <span className={`font-black text-2xl w-12 text-center flex justify-center ${rank === 0 ? 'text-yellow-400' : 'text-slate-500'}`}>{rank === 0 ? <Trophy size={24} /> : `#${rank + 1}`}</span>
-                    <span className="font-bold text-2xl text-white">{p.nickname}</span>
-                  </div>
-                  <span className="font-mono font-black text-2xl text-cyan-400">{p.score}</span>
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="fixed bottom-10 inset-x-0 flex justify-center">
-            <button
-              onClick={handleBtnClick}
-              className="group relative bg-indigo-600 text-white pl-8 pr-10 py-4 rounded-2xl font-black text-xl shadow-2xl shadow-indigo-500/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-3 overflow-hidden"
-            >
-              <span className="relative z-10">
-                {(!paused && timer > 0) ? `Auto Next (${timer}s)` : "Next Round"}
-              </span>
-              <Play size={20} fill="currentColor" className="relative z-10" />
-              {(!paused && timer > 0) && (
-                <div className="absolute bottom-0 left-0 h-1 bg-white/30 transition-all duration-1000 ease-linear w-full" style={{ width: `${(timer / 5) * 100}%` }} />
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <LeaderboardView 
+      snap={snap}
+      sortedPlayers={sortedPlayers}
+      onNext={next}
+      onClose={gracefulShutdown}
+    />;
   }
 
   if (snap.status === 'FINISHED') {
-    const top3 = sortedPlayers.slice(0, 3);
-    return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center pt-10">
-        <HostHeader onClose={gracefulShutdown} />
-
-        <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-4xl px-4 mb-20">
-          {/* 2nd Place */}
-          {top3[1] && (
-            <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom-20 duration-[1500ms]">
-              <div className="text-2xl font-black text-slate-400 mb-4">{top3[1].nickname}</div>
-              <div className="w-full h-40 bg-slate-700 rounded-t-2xl flex items-end justify-center pb-4 border-t-4 border-slate-500 relative">
-                <span className="text-5xl font-black text-white/10">2</span>
-              </div>
-              <div className="mt-4 font-bold text-slate-500">{top3[1].score} pts</div>
-            </div>
-          )}
-
-          {/* 1st Place (No Bounce, No Title) */}
-          {top3[0] && (
-            <div className="flex flex-col items-center w-1/3 -mt-10 z-10 animate-in slide-in-from-bottom-32 duration-[2000ms]">
-              <Trophy size={64} className="text-yellow-400 mb-6 drop-shadow-[0_0_25px_rgba(250,204,21,0.6)]" fill="currentColor" />
-              <div className="text-4xl font-black text-white mb-4">{top3[0].nickname}</div>
-              <div className="w-full h-64 bg-gradient-to-b from-yellow-600 to-yellow-800 rounded-t-3xl flex items-end justify-center pb-6 border-t-4 border-yellow-400 shadow-2xl shadow-yellow-900/40">
-                <span className="text-7xl font-black text-white text-shadow-lg">1</span>
-              </div>
-              <div className="mt-6 font-black text-3xl text-yellow-400 bg-yellow-900/20 px-6 py-2 rounded-xl border border-yellow-500/20">{top3[0].score} pts</div>
-            </div>
-          )}
-
-          {/* 3rd Place */}
-          {top3[2] && (
-            <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom-16 duration-[1200ms]">
-              <div className="text-2xl font-black text-amber-700 mb-4">{top3[2].nickname}</div>
-              <div className="w-full h-32 bg-amber-900/40 rounded-t-2xl flex items-end justify-center pb-4 border-t-4 border-amber-700 relative">
-                <span className="text-5xl font-black text-white/10">3</span>
-              </div>
-              <div className="mt-4 font-bold text-slate-500">{top3[2].score} pts</div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+    return <FinishedView 
+      sortedPlayers={sortedPlayers} 
+      onClose={gracefulShutdown} 
+    />;
   }
+  
+  return null; // Fallback
 };
