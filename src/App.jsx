@@ -1,32 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-  onAuthStateChanged
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
 } from 'firebase/auth';
 import {
-  getFirestore,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-  doc,
-  setDoc,
-  updateDoc,
-  onSnapshot,
-  collection,
-  addDoc,
-  serverTimestamp,
-  deleteDoc
+  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  doc, setDoc, updateDoc, onSnapshot, collection, addDoc, serverTimestamp, deleteDoc
 } from 'firebase/firestore';
 import {
-  Plus, Trash2, LogOut, Loader2, Image as ImageIcon,
-  CheckCircle2, Trophy, Users, Play, XCircle, User as UserIcon
+  Plus, Trash2, Loader2, Image as ImageIcon,
+  CheckCircle2, Trophy, Users, Play, XCircle, User as UserIcon, Lock, Sparkles
 } from 'lucide-react';
 
-// --- FIREBASE CONFIGURATION ---
+// --- CONFIG ---
 const envConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -47,87 +33,67 @@ const db = initializeFirestore(app, {
 });
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'mohoot-prod';
 
-// --- CONSTANTS ---
+// --- COSMOS THEME ---
+const THEME = {
+  bg: 'bg-[#020617]',
+  glassCard: 'bg-[#0F172A]/60 backdrop-blur-xl border border-white/10 shadow-2xl',
+  primaryGradient: 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-violet-500/20',
+  textGradient: 'text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-400',
+  input: 'bg-[#020617] border border-white/10 text-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all',
+  danger: 'text-rose-400 hover:bg-rose-500/10',
+};
+
 const SHAPES = [
-  { id: 0, color: 'bg-[#EA4335]', label: 'Triangle' },
-  { id: 1, color: 'bg-[#4285F4]', label: 'Diamond' },
-  { id: 2, color: 'bg-[#FBBC04]', label: 'Circle' },
-  { id: 3, color: 'bg-[#34A853]', label: 'Square' },
+  { id: 0, color: 'bg-rose-600' },
+  { id: 1, color: 'bg-blue-600' },
+  { id: 2, color: 'bg-amber-500' },
+  { id: 3, color: 'bg-emerald-600' },
 ];
 
 const CARD_THEMES = [
-  { bg: 'bg-rose-500', shadow: 'shadow-rose-900/20', badge: 'bg-rose-700/20 text-white', text: 'text-white' },
-  { bg: 'bg-orange-400', shadow: 'shadow-orange-900/20', badge: 'bg-orange-700/20 text-white', text: 'text-white' },
-  { bg: 'bg-emerald-500', shadow: 'shadow-emerald-900/20', badge: 'bg-emerald-700/20 text-white', text: 'text-white' },
-  { bg: 'bg-blue-500', shadow: 'shadow-blue-900/20', badge: 'bg-blue-700/20 text-white', text: 'text-white' },
-  { bg: 'bg-yellow-400', shadow: 'shadow-yellow-900/20', badge: 'bg-yellow-600/20 text-slate-900', text: 'text-slate-900' },
+  { bg: 'bg-slate-900', border: 'border-violet-500/30', glow: 'shadow-violet-900/20' },
+  { bg: 'bg-slate-900', border: 'border-fuchsia-500/30', glow: 'shadow-fuchsia-900/20' },
+  { bg: 'bg-slate-900', border: 'border-cyan-500/30', glow: 'shadow-cyan-900/20' },
 ];
 
-// --- SUB-COMPONENTS (Fixes White Screen) ---
+// --- COMPONENTS ---
 
 const QuizCard = ({ quiz, index, onHost, onEdit }) => {
-  const theme = CARD_THEMES[index % CARD_THEMES.length];
-  const [clicked, setClicked] = useState(false);
-
-  const handleClick = () => {
-    setClicked(true);
-    setTimeout(() => setClicked(false), 2000);
-  };
-
+  const style = CARD_THEMES[index % CARD_THEMES.length];
   return (
     <div
       onDoubleClick={() => onEdit(quiz)}
-      onClick={handleClick}
-      className={`${theme.bg} ${theme.shadow} h-64 rounded-3xl p-6 relative flex flex-col items-center justify-between shadow-xl cursor-pointer hover:scale-[1.02] transition-transform select-none group`}
+      className={`${style.bg} border ${style.border} ${style.glow} h-64 rounded-3xl p-6 relative flex flex-col items-center justify-between shadow-lg cursor-pointer hover:scale-[1.02] transition-all select-none group`}
     >
-      {/* Badge (Top Left) */}
-      <div className={`absolute top-4 left-4 ${theme.badge} backdrop-blur-md font-black px-3 py-1 rounded-xl text-xs uppercase tracking-wider`}>
+      <div className={`absolute top-4 left-4 bg-white/5 border border-white/10 backdrop-blur-md font-bold px-3 py-1 rounded-full text-[10px] text-slate-300 uppercase tracking-widest`}>
         {quiz.questions?.length || 0} Qs
       </div>
-
-      {/* Title (Center) */}
       <div className="flex-1 flex items-center justify-center w-full text-center mt-4 px-2">
-        <h3 className={`font-black text-3xl leading-none drop-shadow-md break-words line-clamp-3 ${theme.text}`}>
+        <h3 className="font-bold text-2xl text-white leading-tight break-words line-clamp-3 group-hover:text-violet-200 transition-colors">
           {quiz.title || "Untitled"}
         </h3>
       </div>
-
-      {/* Play Button (Bottom Center) */}
       <button
         onClick={(e) => { e.stopPropagation(); onHost(quiz); }}
-        className="bg-white text-slate-900 w-full py-4 rounded-2xl font-black text-lg shadow-lg flex items-center justify-center gap-2 hover:bg-slate-50 active:scale-95 transition-all"
+        className={`w-full py-4 rounded-xl font-bold text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all ${THEME.primaryGradient}`}
       >
-        <Play size={24} fill="currentColor" /> HOST
+        <Play size={18} fill="currentColor" /> HOST LIVE
       </button>
-
-      {/* Hint Overlay */}
-      {clicked && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] rounded-3xl flex items-center justify-center animate-in fade-in duration-200 z-10">
-          <span className="text-white font-bold text-sm">Double-click to Edit</span>
-        </div>
-      )}
     </div>
   );
 };
 
 const DashboardHeader = ({ user, onSignOut }) => (
-  <nav className="bg-app-bg/80 backdrop-blur-md border-b border-white/5 px-8 py-4 flex justify-between items-center sticky top-0 z-20">
-    <div className="font-black text-2xl tracking-tighter text-brand-primary">
-      Mohoot<span className="text-white">!</span>
+  <nav className="bg-[#020617]/80 backdrop-blur-xl border-b border-white/5 px-8 py-5 flex justify-between items-center sticky top-0 z-20">
+    <div className="font-black text-2xl tracking-tighter">
+      <span className="text-white">Mo</span><span className={THEME.textGradient}>hoot</span><span className="text-violet-500">.</span>
     </div>
     <div className="flex items-center gap-4">
-      <button 
-        onClick={onSignOut} 
-        className="p-1 bg-slate-800/50 hover:bg-slate-700 rounded-full border border-slate-600 transition-all shadow-lg flex items-center justify-center group"
-        title="Sign Out"
-      >
-        {user?.photoURL ? (
-            <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-transparent group-hover:border-brand-primary transition-all" alt="Profile" />
-        ) : (
-            <div className="w-10 h-10 bg-brand-primary rounded-full flex items-center justify-center text-white">
-                <UserIcon size={20} />
-            </div>
-        )}
+      <button onClick={onSignOut} className="relative group rounded-full transition-all focus:outline-none" title="Sign Out">
+        <div className="absolute -inset-0.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-full opacity-0 group-hover:opacity-100 blur transition duration-500"></div>
+        <div className="relative rounded-full ring-2 ring-white/10 group-hover:ring-transparent bg-[#020617] p-0.5 transition-all">
+          {user?.photoURL ? <img src={user.photoURL} className="w-9 h-9 rounded-full object-cover" alt="Profile" /> : <div className="w-9 h-9 bg-slate-800 rounded-full flex items-center justify-center text-violet-400"><UserIcon size={18} /></div>}
+        </div>
       </button>
     </div>
   </nav>
@@ -135,45 +101,39 @@ const DashboardHeader = ({ user, onSignOut }) => (
 
 const HostHeader = ({ onClose }) => (
   <div className="fixed top-0 left-0 right-0 p-6 flex justify-between items-center z-50 pointer-events-none">
-    <div className="font-black text-2xl tracking-tighter text-white/10 pointer-events-auto select-none">
-      Mohoot<span className="text-white/20">!</span>
-    </div>
+    <div className="font-black text-xl tracking-tighter text-white/20 pointer-events-auto select-none">M<span className="text-white/10">ohoot</span></div>
     <div className="pointer-events-auto group relative">
-      <button onClick={onClose} className="bg-slate-800/80 backdrop-blur border border-slate-700 p-3 rounded-full text-slate-400 hover:bg-rose-500 hover:text-white hover:border-rose-500 shadow-xl transition-all">
+      <button onClick={onClose} className="bg-black/40 backdrop-blur border border-white/10 p-3 rounded-full text-slate-400 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/50 transition-all">
         <XCircle size={24} />
       </button>
     </div>
   </div>
 );
 
-// --- SUB-COMPONENTS FOR GAME VIEWS ---
+// --- GAME VIEWS ---
 
 const LobbyView = ({ pin, players, onStart, onClose }) => (
-  <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center relative overflow-hidden">
+  <div className={`min-h-screen ${THEME.bg} flex flex-col items-center justify-center relative overflow-hidden`}>
     <HostHeader onClose={onClose} />
-    <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
-    
-    <div className="bg-slate-800/80 backdrop-blur-xl p-10 rounded-[3rem] shadow-2xl border border-slate-700 flex flex-col items-center text-center relative z-10 mb-10">
-      <div className="text-sm font-black text-indigo-400 uppercase tracking-[0.4em] mb-4">Game PIN</div>
-      <div className="text-[8rem] font-black leading-none text-white tabular-nums tracking-tighter drop-shadow-2xl">{pin}</div>
-      <div className="mt-8 flex items-center gap-4 text-slate-400 font-bold">
-         <Users size={20} /> {players.length} Players Joined
+    <div className="absolute top-0 -left-40 w-96 h-96 bg-violet-600/20 rounded-full blur-[128px]"></div>
+    <div className="absolute bottom-0 -right-40 w-96 h-96 bg-fuchsia-600/20 rounded-full blur-[128px]"></div>
+    <div className={`${THEME.glassCard} p-12 rounded-[2.5rem] flex flex-col items-center text-center relative z-10 mb-10 animate-in fade-in zoom-in duration-500`}>
+      <div className="text-xs font-bold text-violet-400 uppercase tracking-[0.4em] mb-6">Join at mohoot.sbs</div>
+      <div className="text-[7rem] md:text-[9rem] font-black leading-none text-white tabular-nums tracking-tighter drop-shadow-[0_0_30px_rgba(139,92,246,0.3)]">{pin}</div>
+      <div className="mt-8 flex items-center gap-3 text-slate-400 font-bold bg-white/5 px-6 py-2 rounded-full border border-white/5">
+        <Users size={18} /> {players.length} Players Ready
       </div>
     </div>
-
-    <div className="flex flex-wrap gap-4 justify-center max-w-5xl mb-20 relative z-10">
+    <div className="flex flex-wrap gap-3 justify-center max-w-5xl mb-24 relative z-10 px-4">
       {players.map((p, i) => (
-        <div key={i} className="bg-slate-800 px-6 py-3 rounded-xl shadow-lg border border-slate-700 font-black text-lg text-cyan-400 animate-in zoom-in">{p.nickname}</div>
+        <div key={i} className="bg-[#1e293b]/80 border border-violet-500/20 px-5 py-2.5 rounded-xl shadow-lg font-bold text-base text-violet-200 animate-in zoom-in duration-300">
+          {p.nickname}
+        </div>
       ))}
     </div>
-
     <div className="fixed bottom-10 z-20">
-       <button
-        disabled={players.length === 0}
-        onClick={onStart}
-        className={`px-12 py-5 rounded-2xl font-black text-2xl shadow-xl transition-all ${players.length > 0 ? 'bg-indigo-600 text-white hover:scale-105' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
-      >
-        Start Game
+      <button disabled={players.length === 0} onClick={onStart} className={`px-16 py-5 rounded-2xl font-black text-xl tracking-wide shadow-2xl transition-all ${players.length > 0 ? THEME.primaryGradient + ' hover:scale-105 hover:shadow-violet-500/40' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}>
+        START GAME
       </button>
     </div>
   </div>
@@ -181,32 +141,103 @@ const LobbyView = ({ pin, players, onStart, onClose }) => (
 
 const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
   const currentQ = snap.quizSnapshot.questions[snap.currentQuestionIndex];
+  const [imgError, setImgError] = useState(false);
+
+  // FIX: Separate lock for finishing to prevent race conditions
+  const [isFinishing, setIsFinishing] = useState(false);
+
+  // LOGIC: Snackbar State
+  const [showSnackbar, setShowSnackbar] = useState(false);
+  const prevCountRef = useRef(0);
+  const answerCount = players.filter(p => p.lastAnswerIdx !== undefined).length;
+
+  // EFFECT: Handle Image Error reset
+  useEffect(() => setImgError(false), [currentQ]);
+
+  // EFFECT: Detect new answers for Snackbar
+  useEffect(() => {
+    // Only show if count increased and we aren't at 0
+    if (answerCount > prevCountRef.current && answerCount > 0) {
+      setShowSnackbar(true);
+      const timer = setTimeout(() => setShowSnackbar(false), 3000); // Hide after 3s
+      return () => clearTimeout(timer);
+    }
+    prevCountRef.current = answerCount;
+  }, [answerCount]);
+
+  // EFFECT: Auto-Advance Logic (FIXED)
+  useEffect(() => {
+    if (players.length > 0 && answerCount === players.length && !isFinishing) {
+      setIsFinishing(true); // Lock it immediately
+      const t = setTimeout(() => {
+        // Force end time to now, which triggers the main loop to move to LEADERBOARD
+        updateDoc(doc(db, 'artifacts', appId, 'sessions', snap.pin), { endTime: Date.now() });
+      }, 1500);
+      return () => clearTimeout(t);
+    }
+  }, [answerCount, players.length, isFinishing, snap.pin]);
+
   return (
-    <div className="min-h-screen bg-app-bg relative flex flex-col">
+    <div className={`min-h-screen ${THEME.bg} relative flex flex-col`}>
       <HostHeader onClose={onClose} />
-      <div className="flex-1 flex flex-col items-center pt-24 px-6 animate-in fade-in">
+      <div className="flex-1 flex flex-col items-center pt-20 px-6 animate-in fade-in">
+
         <div className="w-full flex justify-between items-center max-w-6xl mb-8">
-           <div className="text-indigo-400 font-bold text-xl">Q {snap.currentQuestionIndex + 1}</div>
-           <div className="text-5xl font-black text-white bg-slate-800 px-8 py-2 rounded-2xl shadow-lg border border-slate-700">{timeLeft}</div>
-           <div className="text-slate-400 font-bold text-xl">{players.filter(p => p.lastAnswerIdx !== undefined).length} Answers</div>
+          {/* FIX: Reduced Opacity for Q Indicator */}
+          <div className="text-white/30 font-black text-2xl tracking-widest drop-shadow-sm">Q{snap.currentQuestionIndex + 1}</div>
+
+          <div className="relative group">
+            <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl opacity-50 blur group-hover:opacity-75 transition duration-1000"></div>
+            <div className="relative text-5xl font-black text-white bg-[#020617] px-8 py-3 rounded-xl border border-white/10">
+              {timeLeft}
+            </div>
+          </div>
+
+          {/* REPLACED: No number counter on right, empty div for spacing balance */}
+          <div className="w-10"></div>
         </div>
 
         <div className="flex-1 w-full max-w-5xl flex flex-col items-center justify-center text-center pb-20">
-          {currentQ.image && <img src={currentQ.image} className="h-56 object-contain rounded-2xl shadow-2xl mb-8 bg-black/20" />}
-          <h2 className="text-4xl md:text-5xl font-black text-white leading-tight mb-12">{currentQ.text}</h2>
-          
-          <div className="grid grid-cols-2 gap-6 w-full">
+
+          {currentQ.image && !imgError && (
+            <div className="relative mb-8 group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl opacity-20 blur"></div>
+              <img
+                src={currentQ.image}
+                onError={() => setImgError(true)}
+                className="relative max-h-[35vh] w-auto object-contain rounded-2xl shadow-2xl border border-white/10 bg-black/40"
+              />
+            </div>
+          )}
+
+          <h2 className="text-4xl md:text-5xl font-black text-white leading-tight mb-12 drop-shadow-lg max-w-4xl">
+            {currentQ.text}
+          </h2>
+
+          <div className="grid grid-cols-2 gap-4 w-full">
             {currentQ.answers.map((a, i) => (
-              <div key={i} className={`${SHAPES[i].color} p-6 rounded-2xl text-white text-2xl font-black flex items-center shadow-lg border-4 border-white/10`}>
-                <span className="w-10 h-10 rounded-lg bg-black/20 flex items-center justify-center mr-4 text-lg">{i + 1}</span>
+              <div key={i} className={`${SHAPES[i].color} p-8 rounded-2xl text-white text-2xl font-black flex items-center justify-center shadow-lg border-2 border-white/10 transform transition-transform`}>
                 {a}
               </div>
             ))}
           </div>
         </div>
-        
+
+        {/* NEW: Premium Snackbar */}
+        {showSnackbar && (
+          <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
+            <div className="bg-[#0f172a]/90 backdrop-blur-xl border border-violet-500/30 text-white pl-4 pr-6 py-3 rounded-full shadow-[0_0_30px_rgba(124,58,237,0.3)] flex items-center gap-3">
+              <div className="bg-gradient-to-r from-violet-600 to-fuchsia-600 p-2 rounded-full">
+                <Sparkles size={16} className="text-white" />
+              </div>
+              <span className="font-bold text-sm tracking-wide">Someone answered!</span>
+            </div>
+          </div>
+        )}
+
+        {/* Skip button moved slightly to avoid snackbar overlap */}
         <div className="fixed bottom-6 right-6">
-           <button onClick={onSkip} className="bg-slate-800 text-indigo-400 px-6 py-3 rounded-xl font-bold hover:bg-slate-700">Skip Timer</button>
+          <button onClick={onSkip} className="text-slate-500 hover:text-white px-6 py-3 font-bold text-sm uppercase tracking-wider transition-colors">Skip &raquo;</button>
         </div>
       </div>
     </div>
@@ -214,65 +245,75 @@ const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
 };
 
 const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
-  // HOOKS ARE NOW SAFE HERE because this component only mounts when needed
-  const isFinalStretch = (snap.quizSnapshot.questions.length - (snap.currentQuestionIndex + 1)) < 3;
-  const playersToShow = isFinalStretch ? sortedPlayers.slice(5) : sortedPlayers;
+  const questionsLeft = snap.quizSnapshot.questions.length - (snap.currentQuestionIndex + 1);
+  const isFinalStretch = questionsLeft < 3 && questionsLeft >= 0;
+
   const [timer, setTimer] = useState(5);
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
-      if (timer > 0 && !paused) {
-          const t = setTimeout(() => setTimer(t => t - 1), 1000);
-          return () => clearTimeout(t);
-      } else if (timer === 0 && !paused) {
-          onNext();
-      }
+    if (timer > 0 && !paused) {
+      const t = setTimeout(() => setTimer(t => t - 1), 1000);
+      return () => clearTimeout(t);
+    } else if (timer === 0 && !paused) {
+      onNext();
+    }
   }, [timer, paused]);
 
-  const handleBtnClick = () => {
-      if (!paused && timer > 0) {
-          setPaused(true); 
-      } else {
-          onNext(); 
-      }
-  };
-
   return (
-    <div className="min-h-screen bg-app-bg pt-20 px-6 relative">
+    <div className={`min-h-screen ${THEME.bg} pt-20 px-6 relative`}>
       <HostHeader onClose={onClose} />
       <div className="max-w-3xl mx-auto pt-10 animate-in slide-in-from-bottom-8">
-        <div className="text-center mb-10">
-           <Trophy size={64} className="mx-auto text-yellow-500 mb-4 drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]" />
-           <h2 className="text-5xl font-black text-white">Current Ranking</h2>
+        <div className="text-center mb-12">
+          <Trophy size={56} className="mx-auto text-yellow-500 mb-6 drop-shadow-[0_0_25px_rgba(234,179,8,0.4)]" />
+          <h2 className="text-5xl font-black text-white tracking-tight">Leaderboard</h2>
         </div>
 
+        {isFinalStretch && (
+          <div className="bg-violet-900/20 border border-violet-500/50 p-4 rounded-xl mb-6 text-center text-violet-300 font-bold uppercase tracking-widest animate-pulse">
+            <Lock size={16} className="inline mr-2 mb-1" /> The Podium is Hidden...
+          </div>
+        )}
+
         <div className="space-y-3 mb-20">
-          {playersToShow.map((p, i) => {
-            const rank = isFinalStretch ? i + 5 : i;
-            return (
-              <div key={i} className={`p-5 rounded-2xl flex justify-between items-center ${rank === 0 ? 'bg-yellow-500/10 border border-yellow-500/50' : 'bg-slate-800 border border-slate-700'}`}>
-                <div className="flex items-center gap-6">
-                  <span className={`font-black text-2xl w-12 text-center flex justify-center ${rank === 0 ? 'text-yellow-400' : 'text-slate-500'}`}>{rank === 0 ? <Trophy size={24}/> : `#${rank+1}`}</span>
-                  <span className="font-bold text-2xl text-white">{p.nickname}</span>
+          {sortedPlayers.slice(0, 5).map((p, i) => {
+            if (isFinalStretch && i < 3) {
+              return (
+                <div key={i} className="p-4 rounded-xl flex justify-between items-center bg-[#020617] border border-white/5 opacity-50">
+                  <div className="flex items-center gap-6">
+                    <span className="font-black text-xl w-10 text-center text-slate-700">?</span>
+                    <span className="font-bold text-xl text-slate-700">----------------</span>
+                  </div>
                 </div>
-                <span className="font-mono font-black text-2xl text-cyan-400">{p.score}</span>
+              )
+            }
+
+            return (
+              <div key={i} className={`p-4 rounded-xl flex justify-between items-center border transition-all ${i === 0 ? 'bg-gradient-to-r from-yellow-500/10 to-transparent border-yellow-500/30' : 'bg-slate-900/50 border-white/5'}`}>
+                <div className="flex items-center gap-6">
+                  <span className={`font-black text-xl w-10 text-center ${i === 0 ? 'text-yellow-400' : 'text-slate-600'}`}>
+                    {i === 0 ? <Trophy size={20} className="mx-auto" /> : i + 1}
+                  </span>
+                  <span className="font-bold text-xl text-white">{p.nickname}</span>
+                </div>
+                <span className={`font-mono font-black text-xl ${i === 0 ? 'text-yellow-400' : 'text-violet-400'}`}>{p.score}</span>
               </div>
             )
           })}
         </div>
 
         <div className="fixed bottom-10 inset-x-0 flex justify-center">
-          <button 
-              onClick={handleBtnClick} 
-              className="group relative bg-indigo-600 text-white pl-8 pr-10 py-4 rounded-2xl font-black text-xl shadow-2xl shadow-indigo-500/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-3 overflow-hidden"
+          <button
+            onClick={() => paused ? onNext() : setPaused(true)}
+            className={`group relative ${THEME.primaryGradient} pl-8 pr-10 py-4 rounded-2xl font-black text-lg shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3 overflow-hidden`}
           >
-              <span className="relative z-10">
-                  {(!paused && timer > 0) ? `Auto Next (${timer}s)` : "Next Round"}
-              </span>
-              <Play size={20} fill="currentColor" className="relative z-10" />
-              {(!paused && timer > 0) && (
-                 <div className="absolute bottom-0 left-0 h-1 bg-white/30 transition-all duration-1000 ease-linear w-full" style={{ width: `${(timer/5)*100}%` }} />
-              )}
+            <span className="relative z-10">
+              {(!paused && timer > 0) ? `Auto Next (${timer}s)` : "Next Round"}
+            </span>
+            <Play size={18} fill="currentColor" className="relative z-10" />
+            {(!paused && timer > 0) && (
+              <div className="absolute bottom-0 left-0 h-1 bg-white/40 transition-all duration-1000 ease-linear w-full" style={{ width: `${(timer / 5) * 100}%` }} />
+            )}
           </button>
         </div>
       </div>
@@ -283,41 +324,36 @@ const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
 const FinishedView = ({ sortedPlayers, onClose }) => {
   const top3 = sortedPlayers.slice(0, 3);
   return (
-    <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center pt-10">
+    <div className={`min-h-screen ${THEME.bg} flex flex-col items-center justify-center pt-10`}>
       <HostHeader onClose={onClose} />
-      
-      <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-4xl px-4 mb-20">
-        {/* 2nd Place */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-violet-900/20 via-slate-950 to-slate-950 pointer-events-none"></div>
+      <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-4xl px-4 mb-20 relative z-10">
         {top3[1] && (
           <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom-20 duration-[1500ms]">
-             <div className="text-2xl font-black text-slate-400 mb-4">{top3[1].nickname}</div>
-             <div className="w-full h-40 bg-slate-700 rounded-t-2xl flex items-end justify-center pb-4 border-t-4 border-slate-500 relative">
-               <span className="text-5xl font-black text-white/10">2</span>
-             </div>
-             <div className="mt-4 font-bold text-slate-500">{top3[1].score} pts</div>
+            <div className="text-xl font-black text-slate-400 mb-4">{top3[1].nickname}</div>
+            <div className="w-full h-40 bg-slate-800 rounded-t-2xl flex items-end justify-center pb-4 border-t border-slate-600 relative shadow-2xl">
+              <span className="text-5xl font-black text-white/10">2</span>
+            </div>
+            <div className="mt-4 font-bold text-slate-500">{top3[1].score}</div>
           </div>
         )}
-
-        {/* 1st Place */}
         {top3[0] && (
           <div className="flex flex-col items-center w-1/3 -mt-10 z-10 animate-in slide-in-from-bottom-32 duration-[2000ms]">
-             <Trophy size={64} className="text-yellow-400 mb-6 drop-shadow-[0_0_25px_rgba(250,204,21,0.6)]" fill="currentColor" />
-             <div className="text-4xl font-black text-white mb-4">{top3[0].nickname}</div>
-             <div className="w-full h-64 bg-gradient-to-b from-yellow-600 to-yellow-800 rounded-t-3xl flex items-end justify-center pb-6 border-t-4 border-yellow-400 shadow-2xl shadow-yellow-900/40">
-               <span className="text-7xl font-black text-white text-shadow-lg">1</span>
-             </div>
-             <div className="mt-6 font-black text-3xl text-yellow-400 bg-yellow-900/20 px-6 py-2 rounded-xl border border-yellow-500/20">{top3[0].score} pts</div>
+            <Trophy size={64} className="text-yellow-400 mb-6 drop-shadow-[0_0_35px_rgba(250,204,21,0.5)]" fill="currentColor" />
+            <div className="text-3xl font-black text-white mb-4 tracking-tight">{top3[0].nickname}</div>
+            <div className="w-full h-64 bg-gradient-to-b from-yellow-500 to-yellow-700 rounded-t-3xl flex items-end justify-center pb-6 border-t-4 border-yellow-300 shadow-[0_0_50px_rgba(234,179,8,0.2)]">
+              <span className="text-7xl font-black text-white drop-shadow-md">1</span>
+            </div>
+            <div className="mt-6 font-black text-2xl text-yellow-400 bg-yellow-900/10 px-6 py-2 rounded-xl border border-yellow-500/20">{top3[0].score}</div>
           </div>
         )}
-
-        {/* 3rd Place */}
         {top3[2] && (
           <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom-16 duration-[1200ms]">
-             <div className="text-2xl font-black text-amber-700 mb-4">{top3[2].nickname}</div>
-             <div className="w-full h-32 bg-amber-900/40 rounded-t-2xl flex items-end justify-center pb-4 border-t-4 border-amber-700 relative">
-               <span className="text-5xl font-black text-white/10">3</span>
-             </div>
-             <div className="mt-4 font-bold text-slate-500">{top3[2].score} pts</div>
+            <div className="text-xl font-black text-amber-700 mb-4">{top3[2].nickname}</div>
+            <div className="w-full h-32 bg-amber-900/20 rounded-t-2xl flex items-end justify-center pb-4 border-t border-amber-800 relative">
+              <span className="text-5xl font-black text-white/10">3</span>
+            </div>
+            <div className="mt-4 font-bold text-slate-500">{top3[2].score}</div>
           </div>
         )}
       </div>
@@ -325,7 +361,7 @@ const FinishedView = ({ sortedPlayers, onClose }) => {
   );
 };
 
-// --- MAIN COMPONENT ---
+// --- MAIN WRAPPER ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState('DASHBOARD');
@@ -333,28 +369,19 @@ export default function App() {
   const [editingQuiz, setEditingQuiz] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
 
-  // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
+    const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
     return () => unsubscribe();
   }, []);
 
-  // Fetch Quizzes
   useEffect(() => {
     if (!user) return;
-    const qRef = collection(db, 'artifacts', appId, 'users', user.uid, 'quizzes');
-    const unsubscribe = onSnapshot(qRef, (snap) => {
-      setQuizzes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return () => unsubscribe();
+    return onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'quizzes'),
+      (snap) => setQuizzes(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
   }, [user]);
 
-  // Restore Active Session
   useEffect(() => {
     const saved = localStorage.getItem('mohoot_host_active');
     if (saved && user) {
@@ -362,140 +389,76 @@ export default function App() {
         const { quizId, pin } = JSON.parse(saved);
         setActiveSession({ quizId, pin });
         setView('GAME');
-      } catch (e) {
-        localStorage.removeItem('mohoot_host_active');
-      }
+      } catch (e) { }
     }
   }, [user]);
 
-  const handleLogin = async () => {
-    try { await signInWithPopup(auth, new GoogleAuthProvider()); }
-    catch (error) { alert("Login failed: " + error.message); }
-  };
-
   const createQuiz = () => {
-    setEditingQuiz({
-      title: "Untitled Quiz",
-      questions: [{ text: "", image: "", answers: ["", "", "", ""], correct: 0, duration: 20 }]
-    });
+    setEditingQuiz({ title: "Untitled Quiz", questions: [{ text: "", image: "", answers: ["", "", "", ""], correct: 0, duration: 20 }] });
     setView('EDITOR');
   };
 
   const saveQuiz = async (q) => {
-    if (!user) return;
-    setIsSaving(true);
-    try {
-      const ref = collection(db, 'artifacts', appId, 'users', user.uid, 'quizzes');
-      if (q.id) {
-        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'quizzes', q.id), { ...q });
-      } else {
-        await addDoc(ref, { ...q, createdAt: serverTimestamp() });
-      }
-      setView('DASHBOARD');
-    } catch (error) {
-      alert("Error saving: " + error.message);
-    } finally {
-      setIsSaving(false);
-    }
+    const ref = collection(db, 'artifacts', appId, 'users', user.uid, 'quizzes');
+    if (q.id) await updateDoc(doc(ref, q.id), { ...q });
+    else await addDoc(ref, { ...q, createdAt: serverTimestamp() });
+    setView('DASHBOARD');
   };
 
   const launchGame = async (quiz) => {
-    if (!user) return;
     const pin = Math.floor(100000 + Math.random() * 900000).toString();
-    try {
-      await setDoc(doc(db, 'artifacts', appId, 'sessions', pin), {
-        hostId: user.uid,
-        quizId: quiz.id,
-        status: 'LOBBY',
-        currentQuestionIndex: 0,
-        players: {},
-        quizSnapshot: quiz,
-        lastUpdated: serverTimestamp()
-      });
-      setActiveSession({ quizId: quiz.id, pin });
-      setView('GAME');
-      localStorage.setItem('mohoot_host_active', JSON.stringify({ quizId: quiz.id, pin }));
-    } catch (error) {
-      alert("Failed to start game: " + error.message);
-    }
+    await setDoc(doc(db, 'artifacts', appId, 'sessions', pin), {
+      hostId: user.uid, quizId: quiz.id, status: 'LOBBY', currentQuestionIndex: 0,
+      players: {}, quizSnapshot: quiz, lastUpdated: serverTimestamp()
+    });
+    setActiveSession({ quizId: quiz.id, pin });
+    setView('GAME');
+    localStorage.setItem('mohoot_host_active', JSON.stringify({ quizId: quiz.id, pin }));
   };
 
-  if (loading) return <div className="h-screen bg-app-bg flex items-center justify-center"><Loader2 className="animate-spin text-indigo-500" /></div>;
+  if (loading) return <div className={`h-screen ${THEME.bg} flex items-center justify-center`}><Loader2 className="animate-spin text-violet-500" /></div>;
 
   if (!user) return (
-    <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center p-4">
-      <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700 p-10 rounded-3xl shadow-2xl text-center max-w-md w-full">
-        <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 mb-2 tracking-tighter">Mohoot!</h1>
-        <button onClick={handleLogin} className="w-full mt-8 bg-white text-slate-900 font-bold py-4 rounded-2xl hover:bg-slate-100 transition-all">
-          Sign in with Google
-        </button>
+    <div className={`min-h-screen ${THEME.bg} flex flex-col items-center justify-center p-4 relative overflow-hidden`}>
+      <div className={`${THEME.glassCard} p-12 rounded-3xl text-center max-w-md w-full relative z-10`}>
+        <h1 className={`text-5xl font-black mb-4 tracking-tighter ${THEME.textGradient}`}>Mohoot!</h1>
+        <button onClick={() => signInWithPopup(auth, new GoogleAuthProvider())} className={`w-full ${THEME.primaryGradient} py-4 rounded-xl font-bold`}>Sign in with Google</button>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-app-bg text-white font-sans selection:bg-brand-primary/30">
-
+    <div className={`min-h-screen ${THEME.bg} text-white font-sans selection:bg-violet-500/30`}>
       {view === 'DASHBOARD' && (
         <>
           <DashboardHeader user={user} onSignOut={() => signOut(auth)} />
           <div className="p-8 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex justify-between items-center mb-10">
-              <h2 className="text-4xl font-black text-white tracking-tight">My Quizzes</h2>
-              <button onClick={createQuiz} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-bold flex gap-2 items-center hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition transform hover:-translate-y-1">
+              <h2 className="text-4xl font-black text-white tracking-tight">Library</h2>
+              <button onClick={createQuiz} className={`${THEME.primaryGradient} px-6 py-3 rounded-xl font-bold flex gap-2 items-center`}>
                 <Plus size={20} /> Create New
               </button>
             </div>
-
-            {quizzes.length === 0 ? (
-              <div className="bg-slate-800/50 border-2 border-dashed border-slate-700 rounded-3xl p-20 text-center text-slate-500">
-                <Play size={48} className="mx-auto mb-4 opacity-20" />
-                <p className="text-lg font-medium">No quizzes found. Click "Create New" to start!</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {quizzes.map((q, index) => (
-                  <QuizCard
-                    key={q.id}
-                    quiz={q}
-                    index={index}
-                    onHost={launchGame}
-                    onEdit={(quiz) => { setEditingQuiz(quiz); setView('EDITOR'); }}
-                  />
-                ))}
-              </div>
-            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {quizzes.map((q, i) => <QuizCard key={q.id} quiz={q} index={i} onHost={launchGame} onEdit={(quiz) => { setEditingQuiz(quiz); setView('EDITOR'); }} />)}
+            </div>
           </div>
         </>
       )}
 
       {view === 'EDITOR' && (
-        <Editor
-          user={user}
-          quiz={editingQuiz}
-          onSave={saveQuiz}
-          onCancel={() => setView('DASHBOARD')}
-          isSaving={isSaving}
-        />
+        <Editor user={user} quiz={editingQuiz} onSave={saveQuiz} onCancel={() => setView('DASHBOARD')} />
       )}
 
       {view === 'GAME' && (
-        <GameSession
-          user={user}
-          sessionData={activeSession}
-          onExit={() => {
-            localStorage.removeItem('mohoot_host_active');
-            setActiveSession(null);
-            setView('DASHBOARD');
-          }}
-        />
+        <GameSession user={user} sessionData={activeSession} onExit={() => { localStorage.removeItem('mohoot_host_active'); setActiveSession(null); setView('DASHBOARD'); }} />
       )}
     </div>
   );
 }
 
-// --- EDITOR COMPONENT ---
-const Editor = ({ user, quiz, onSave, onCancel, isSaving }) => {
+// --- EDITOR WITH SIDEBAR FIX ---
+const Editor = ({ user, quiz, onSave, onCancel }) => {
   const [q, setQ] = useState(quiz);
   const [idx, setIdx] = useState(0);
   const current = q.questions[idx];
@@ -507,117 +470,71 @@ const Editor = ({ user, quiz, onSave, onCancel, isSaving }) => {
   };
 
   const addQuestion = () => {
-    const newQs = [...q.questions, { text: "", image: "", answers: ["", "", "", ""], correct: 0, duration: 20 }];
-    setQ({ ...q, questions: newQs });
-    setIdx(newQs.length - 1);
-  };
-
-  const handleDelete = async () => {
-    if (confirm("Are you sure you want to delete this quiz completely?")) {
-      try {
-        if (q.id) {
-          const appId = 'mohoot-prod';
-          await deleteDoc(doc(getFirestore(), 'artifacts', appId, 'users', user.uid, 'quizzes', q.id));
-        }
-        onCancel();
-      } catch (e) { alert(e.message); }
-    }
+    setQ({ ...q, questions: [...q.questions, { text: "", image: "", answers: ["", "", "", ""], correct: 0, duration: 20 }] });
+    setIdx(q.questions.length);
   };
 
   return (
-    <div className="flex gap-6 h-screen p-6 bg-app-bg animate-in slide-in-from-right-4 duration-300">
+    <div className="flex gap-6 h-screen p-6 bg-[#020617]">
       <div className="w-64 flex flex-col gap-2">
-        <h2 className="text-slate-400 font-bold mb-4 px-2">Questions</h2>
+        <h2 className="text-slate-500 font-bold mb-4 px-2 uppercase text-xs tracking-widest">Outline</h2>
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
           {q.questions.map((_, i) => (
             <button
               key={i}
               onClick={() => setIdx(i)}
-              className={`w-full text-left p-4 rounded-xl transition-all font-bold text-sm ${i === idx ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              className={`w-full text-left p-4 rounded-r-xl border-l-4 transition-all font-bold text-sm ${i === idx ? 'border-violet-500 bg-violet-500/10 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
             >
               Question {i + 1}
             </button>
           ))}
-          <button onClick={addQuestion} className="w-full py-4 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 font-bold text-sm hover:border-indigo-500/50 hover:text-indigo-400 transition-all flex items-center justify-center gap-2">
-            <Plus size={18} /> Add Question
+          <button onClick={addQuestion} className="w-full py-4 border border-dashed border-slate-800 rounded-xl text-slate-600 font-bold text-sm hover:border-violet-500/50 hover:text-violet-400 transition-all flex items-center justify-center gap-2">
+            <Plus size={16} /> Add New
           </button>
         </div>
       </div>
 
-      <div className="flex-1 bg-slate-800/30 rounded-3xl border border-slate-700/50 p-10 flex flex-col overflow-y-auto">
+      <div className={`${THEME.glassCard} flex-1 rounded-3xl p-10 flex flex-col overflow-y-auto`}>
         <div className="mb-8 border-b border-white/5 pb-8">
-          <input
-            className="w-full text-4xl font-black bg-transparent border-none focus:ring-0 outline-none text-white placeholder-slate-600"
-            value={q.title}
-            onChange={e => setQ({ ...q, title: e.target.value })}
-            placeholder="Quiz Title..."
-          />
+          <input className="w-full text-4xl font-black bg-transparent border-none focus:ring-0 outline-none text-white placeholder-slate-700" value={q.title} onChange={e => setQ({ ...q, title: e.target.value })} placeholder="Enter Quiz Title..." />
         </div>
-
         <div className="flex-1 space-y-8">
           <div>
-            <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Question Text</label>
-            <textarea
-              className="w-full p-6 bg-slate-950 rounded-2xl text-xl font-bold outline-none focus:ring-2 ring-indigo-500 text-white resize-none"
-              rows="2"
-              value={current.text}
-              onChange={e => update('text', e.target.value)}
-              placeholder="What is...?"
-            />
+            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block tracking-wider">Question Text</label>
+            <textarea className={`${THEME.input} w-full p-6 rounded-2xl text-xl font-bold resize-none`} rows="2" value={current.text} onChange={e => update('text', e.target.value)} placeholder="What is the meaning of..." />
           </div>
-
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-4">
-              <label className="text-xs font-bold text-slate-400 uppercase block">Settings</label>
-              <div className="flex items-center gap-3 bg-slate-950 p-4 rounded-xl">
-                <ImageIcon size={20} className="text-indigo-400" />
-                <input className="bg-transparent w-full outline-none text-sm text-white" value={current.image || ''} onChange={e => update('image', e.target.value)} placeholder="Image URL (Optional)" />
+              <label className="text-xs font-bold text-slate-500 uppercase block tracking-wider">Settings</label>
+              <div className={`${THEME.input} flex items-center gap-3 p-4 rounded-xl`}>
+                <ImageIcon size={20} className="text-violet-400" />
+                <input className="bg-transparent w-full outline-none text-sm text-white placeholder-slate-600" value={current.image || ''} onChange={e => update('image', e.target.value)} placeholder="Image URL (Optional)" />
               </div>
-              <div className="bg-slate-950 p-4 rounded-xl">
-                <span className="text-xs font-bold text-slate-500 block mb-1">Time Limit (Seconds)</span>
+              <div className={`${THEME.input} p-4 rounded-xl`}>
+                <span className="text-xs font-bold text-slate-500 block mb-1">Duration (Seconds)</span>
                 <input type="number" className="bg-transparent w-full font-black text-xl outline-none text-white" value={current.duration} onChange={e => update('duration', parseInt(e.target.value) || 0)} />
               </div>
             </div>
-
             <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-400 uppercase block">Answers</label>
+              <label className="text-xs font-bold text-slate-500 uppercase block tracking-wider">Answer Options</label>
               <div className="grid gap-3">
                 {current.answers.map((ans, i) => (
-                  <div key={i} className={`flex items-center gap-3 p-1 rounded-xl ${current.correct === i ? 'bg-indigo-500/20 ring-1 ring-indigo-500' : 'bg-app-bg'}`}>
-                    <button
-                      onClick={() => update('correct', i)}
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${current.correct === i ? SHAPES[i].color : 'bg-slate-800 text-slate-500'}`}
-                    >
-                      <CheckCircle2 size={20} className={current.correct === i ? "text-white" : "text-slate-600"} />
+                  <div key={i} className={`flex items-center gap-3 p-1.5 rounded-xl border transition-all ${current.correct === i ? 'bg-violet-500/10 border-violet-500/50' : 'bg-[#020617] border-white/5'}`}>
+                    <button onClick={() => update('correct', i)} className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${current.correct === i ? SHAPES[i].color : 'bg-slate-800 text-slate-600 hover:text-slate-400'}`}>
+                      <CheckCircle2 size={20} className={current.correct === i ? "text-white" : "text-current"} />
                     </button>
-                    <input
-                      className="bg-transparent flex-1 font-bold text-sm py-2 outline-none text-white"
-                      value={ans}
-                      onChange={e => {
-                        const newAns = [...current.answers];
-                        newAns[i] = e.target.value;
-                        update('answers', newAns);
-                      }}
-                      placeholder={`Option ${i + 1}`}
-                    />
+                    <input className="bg-transparent flex-1 font-bold text-sm py-2 outline-none text-white placeholder-slate-700" value={ans} onChange={e => { const newAns = [...current.answers]; newAns[i] = e.target.value; update('answers', newAns); }} placeholder={`Option ${i + 1}`} />
                   </div>
                 ))}
               </div>
             </div>
           </div>
         </div>
-
         <div className="mt-8 flex justify-between items-center pt-6 border-t border-white/5">
-          {q.id && (
-            <button onClick={handleDelete} className="text-rose-400 font-bold hover:bg-rose-500/10 px-4 py-2 rounded-lg transition flex items-center gap-2">
-              <Trash2 size={18} /> Delete Quiz
-            </button>
-          )}
+          {q.id && (<button onClick={async () => { if (confirm("Delete?")) { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'quizzes', q.id)); onCancel(); } }} className={THEME.danger + " font-bold px-4 py-2 rounded-lg transition flex items-center gap-2"}><Trash2 size={18} /> Delete</button>)}
           <div className="flex gap-4 ml-auto">
-            <button onClick={onCancel} className="px-6 py-3 rounded-xl font-bold text-slate-400 hover:text-white transition">Discard</button>
-            <button onClick={() => onSave(q)} disabled={isSaving} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 flex items-center gap-2">
-              {isSaving ? <Loader2 className="animate-spin" size={20} /> : "Save Quiz"}
-            </button>
+            <button onClick={onCancel} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:text-white transition">Discard</button>
+            <button onClick={() => onSave(q)} className={`${THEME.primaryGradient} px-8 py-3 rounded-xl font-bold`}>Save Quiz</button>
           </div>
         </div>
       </div>
@@ -625,103 +542,45 @@ const Editor = ({ user, quiz, onSave, onCancel, isSaving }) => {
   );
 };
 
-
 const GameSession = ({ user, sessionData, onExit }) => {
   const [snap, setSnap] = useState(null);
-  const [error, setError] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [isCleaning, setIsCleaning] = useState(false);
   const pin = sessionData.pin;
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), 
-      (s) => s.exists() ? setSnap(s.data()) : setError("Session ended"),
-      (err) => setError(err.message)
-    );
-    return () => unsub();
+    return onSnapshot(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), s => s.exists() ? setSnap({ ...s.data(), pin }) : onExit());
   }, [pin]);
 
   useEffect(() => {
-    if (snap?.status === 'QUESTION' && snap.endTime) {
+    if (snap?.status === 'QUESTION') {
       const timer = setInterval(() => {
         const remaining = Math.ceil((snap.endTime - Date.now()) / 1000);
         setTimeLeft(Math.max(0, remaining));
-        if (remaining <= 0) update('LEADERBOARD');
+        if (remaining <= 0) {
+          updateDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), { status: 'LEADERBOARD', lastUpdated: serverTimestamp() });
+        }
       }, 100);
       return () => clearInterval(timer);
     }
   }, [snap?.status, snap?.endTime]);
 
-  const update = (status, extra = {}) => {
-    updateDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), { status, ...extra, lastUpdated: serverTimestamp() });
-  };
-
-  const gracefulShutdown = async () => {
-    if (isCleaning) return;
-    setIsCleaning(true);
-    try {
-      await deleteDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin));
-    } catch (e) { console.error(e); } 
-    finally { onExit(); }
-  };
-
   const next = () => {
     const nIdx = snap.currentQuestionIndex + 1;
     const q = snap.quizSnapshot.questions[nIdx];
-    if (q) {
-      update('QUESTION', {
-        currentQuestionIndex: nIdx,
-        roundId: Date.now(), 
-        startTime: Date.now() + 2000,
-        endTime: Date.now() + 2000 + (q.duration * 1000)
-      });
-    } else {
-      update('FINISHED');
-    }
+    const payload = q
+      ? { status: 'QUESTION', currentQuestionIndex: nIdx, roundId: Date.now(), startTime: Date.now() + 2000, endTime: Date.now() + 2000 + (q.duration * 1000) }
+      : { status: 'FINISHED' };
+    updateDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), { ...payload, lastUpdated: serverTimestamp() });
   };
 
-  if (error) return <div className="h-screen flex items-center justify-center text-rose-500 font-bold bg-app-bg">{error}</div>;
-  if (!snap) return <div className="h-screen flex items-center justify-center bg-app-bg"><Loader2 className="animate-spin text-indigo-500" /></div>;
+  if (!snap) return <div className={`h-screen flex items-center justify-center ${THEME.bg}`}><Loader2 className="animate-spin text-violet-500" /></div>;
 
   const players = Object.values(snap.players || {});
   const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
-  const currentQ = snap.quizSnapshot.questions[snap.currentQuestionIndex];
 
-  // RENDER: Clean separation of concerns prevents Hook errors
-  if (snap.status === 'LOBBY') {
-    return <LobbyView 
-      pin={pin} 
-      players={players} 
-      onStart={() => update('QUESTION', { roundId: Date.now(), startTime: Date.now() + 2000, endTime: Date.now() + 2000 + (currentQ.duration * 1000) })}
-      onClose={gracefulShutdown} 
-    />;
-  }
-
-  if (snap.status === 'QUESTION') {
-    return <QuestionView 
-      snap={snap} 
-      players={players} 
-      timeLeft={timeLeft} 
-      onSkip={() => update('LEADERBOARD')}
-      onClose={gracefulShutdown}
-    />;
-  }
-
-  if (snap.status === 'LEADERBOARD') {
-    return <LeaderboardView 
-      snap={snap}
-      sortedPlayers={sortedPlayers}
-      onNext={next}
-      onClose={gracefulShutdown}
-    />;
-  }
-
-  if (snap.status === 'FINISHED') {
-    return <FinishedView 
-      sortedPlayers={sortedPlayers} 
-      onClose={gracefulShutdown} 
-    />;
-  }
-  
-  return null; // Fallback
+  if (snap.status === 'LOBBY') return <LobbyView pin={pin} players={players} onStart={() => next()} onClose={() => deleteDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin))} />;
+  if (snap.status === 'QUESTION') return <QuestionView snap={snap} players={players} timeLeft={timeLeft} onSkip={() => updateDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), { status: 'LEADERBOARD', lastUpdated: serverTimestamp() })} onClose={() => onExit()} />;
+  if (snap.status === 'LEADERBOARD') return <LeaderboardView snap={snap} sortedPlayers={sortedPlayers} onNext={next} onClose={() => onExit()} />;
+  if (snap.status === 'FINISHED') return <FinishedView sortedPlayers={sortedPlayers} onClose={() => onExit()} />;
+  return null;
 };
