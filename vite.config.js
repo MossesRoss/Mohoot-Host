@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-// Changed as per our webhost, Vercel
+
+// Changed as per our webhost, Vercel and GitHub Pages compatibility
 export default defineConfig(({ command, mode }) => {
+  const isVercel = process.env.VERCEL === '1';
   return {
     plugins: [react()],
-    base: '/Mohoot-Host/', 
+    base: isVercel ? '/' : '/Mohoot-Host/', 
   }
 })
