@@ -23,7 +23,7 @@ import {
 } from 'firebase/firestore';
 import {
   Plus, Trash2, LogOut, Loader2, Image as ImageIcon,
-  CheckCircle2, Trophy, Users, Play, XCircle
+  CheckCircle2, Trophy, Users, Play, XCircle, User as UserIcon
 } from 'lucide-react';
 
 // --- FIREBASE CONFIGURATION ---
@@ -111,16 +111,23 @@ const QuizCard = ({ quiz, index, onHost, onEdit }) => {
 };
 
 const DashboardHeader = ({ user, onSignOut }) => (
-  <nav className="bg-slate-900/80 backdrop-blur-md border-b border-white/5 px-8 py-4 flex justify-between items-center sticky top-0 z-20">
-    <div className="font-black text-2xl tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
+  <nav className="bg-app-bg/80 backdrop-blur-md border-b border-white/5 px-8 py-4 flex justify-between items-center sticky top-0 z-20">
+    <div className="font-black text-2xl tracking-tighter text-brand-primary">
       Mohoot<span className="text-white">!</span>
     </div>
     <div className="flex items-center gap-4">
-      <span className="text-xs font-mono bg-slate-800 px-3 py-1 rounded text-slate-400 border border-white/5">
-        {user?.uid.slice(0, 6)}...
-      </span>
-      <button onClick={onSignOut} className="p-2 text-slate-500 hover:text-rose-400 transition" title="Sign Out">
-        <LogOut size={20} />
+      <button 
+        onClick={onSignOut} 
+        className="p-1 bg-slate-800/50 hover:bg-slate-700 rounded-full border border-slate-600 transition-all shadow-lg flex items-center justify-center group"
+        title="Sign Out"
+      >
+        {user?.photoURL ? (
+            <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-transparent group-hover:border-brand-primary transition-all" alt="Profile" />
+        ) : (
+            <div className="w-10 h-10 bg-brand-primary rounded-full flex items-center justify-center text-white">
+                <UserIcon size={20} />
+            </div>
+        )}
       </button>
     </div>
   </nav>
@@ -142,7 +149,7 @@ const HostHeader = ({ onClose }) => (
 // --- SUB-COMPONENTS FOR GAME VIEWS ---
 
 const LobbyView = ({ pin, players, onStart, onClose }) => (
-  <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center relative overflow-hidden">
+  <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center relative overflow-hidden">
     <HostHeader onClose={onClose} />
     <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
     
@@ -175,7 +182,7 @@ const LobbyView = ({ pin, players, onStart, onClose }) => (
 const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
   const currentQ = snap.quizSnapshot.questions[snap.currentQuestionIndex];
   return (
-    <div className="min-h-screen bg-slate-900 relative flex flex-col">
+    <div className="min-h-screen bg-app-bg relative flex flex-col">
       <HostHeader onClose={onClose} />
       <div className="flex-1 flex flex-col items-center pt-24 px-6 animate-in fade-in">
         <div className="w-full flex justify-between items-center max-w-6xl mb-8">
@@ -231,7 +238,7 @@ const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 pt-20 px-6 relative">
+    <div className="min-h-screen bg-app-bg pt-20 px-6 relative">
       <HostHeader onClose={onClose} />
       <div className="max-w-3xl mx-auto pt-10 animate-in slide-in-from-bottom-8">
         <div className="text-center mb-10">
@@ -276,7 +283,7 @@ const LeaderboardView = ({ snap, sortedPlayers, onNext, onClose }) => {
 const FinishedView = ({ sortedPlayers, onClose }) => {
   const top3 = sortedPlayers.slice(0, 3);
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center pt-10">
+    <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center pt-10">
       <HostHeader onClose={onClose} />
       
       <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-4xl px-4 mb-20">
@@ -413,10 +420,10 @@ export default function App() {
     }
   };
 
-  if (loading) return <div className="h-screen bg-slate-900 flex items-center justify-center"><Loader2 className="animate-spin text-indigo-500" /></div>;
+  if (loading) return <div className="h-screen bg-app-bg flex items-center justify-center"><Loader2 className="animate-spin text-indigo-500" /></div>;
 
   if (!user) return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-app-bg flex flex-col items-center justify-center p-4">
       <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700 p-10 rounded-3xl shadow-2xl text-center max-w-md w-full">
         <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 mb-2 tracking-tighter">Mohoot!</h1>
         <button onClick={handleLogin} className="w-full mt-8 bg-white text-slate-900 font-bold py-4 rounded-2xl hover:bg-slate-100 transition-all">
@@ -427,7 +434,7 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-app-bg text-white font-sans selection:bg-brand-primary/30">
 
       {view === 'DASHBOARD' && (
         <>
@@ -518,7 +525,7 @@ const Editor = ({ user, quiz, onSave, onCancel, isSaving }) => {
   };
 
   return (
-    <div className="flex gap-6 h-screen p-6 bg-slate-900 animate-in slide-in-from-right-4 duration-300">
+    <div className="flex gap-6 h-screen p-6 bg-app-bg animate-in slide-in-from-right-4 duration-300">
       <div className="w-64 flex flex-col gap-2">
         <h2 className="text-slate-400 font-bold mb-4 px-2">Questions</h2>
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
@@ -576,7 +583,7 @@ const Editor = ({ user, quiz, onSave, onCancel, isSaving }) => {
               <label className="text-xs font-bold text-slate-400 uppercase block">Answers</label>
               <div className="grid gap-3">
                 {current.answers.map((ans, i) => (
-                  <div key={i} className={`flex items-center gap-3 p-1 rounded-xl ${current.correct === i ? 'bg-indigo-500/20 ring-1 ring-indigo-500' : 'bg-slate-900'}`}>
+                  <div key={i} className={`flex items-center gap-3 p-1 rounded-xl ${current.correct === i ? 'bg-indigo-500/20 ring-1 ring-indigo-500' : 'bg-app-bg'}`}>
                     <button
                       onClick={() => update('correct', i)}
                       className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${current.correct === i ? SHAPES[i].color : 'bg-slate-800 text-slate-500'}`}
@@ -673,8 +680,8 @@ const GameSession = ({ user, sessionData, onExit }) => {
     }
   };
 
-  if (error) return <div className="h-screen flex items-center justify-center text-rose-500 font-bold bg-slate-900">{error}</div>;
-  if (!snap) return <div className="h-screen flex items-center justify-center bg-slate-900"><Loader2 className="animate-spin text-indigo-500" /></div>;
+  if (error) return <div className="h-screen flex items-center justify-center text-rose-500 font-bold bg-app-bg">{error}</div>;
+  if (!snap) return <div className="h-screen flex items-center justify-center bg-app-bg"><Loader2 className="animate-spin text-indigo-500" /></div>;
 
   const players = Object.values(snap.players || {});
   const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
