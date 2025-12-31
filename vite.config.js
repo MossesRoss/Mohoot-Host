@@ -7,5 +7,10 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins: [react()],
     base: isVercel ? '/' : '/Mohoot-Host/', 
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      setupFiles: './src/setupTests.js',
+    },
   }
 })
