@@ -5,11 +5,13 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, setDoc, updateDoc, onSnapshot, collection, addDoc, serverTimestamp, deleteDoc
+  doc, setDoc, updateDoc, onSnapshot, collection, addDoc, serverTimestamp, deleteDoc,
+  runTransaction
 } from 'firebase/firestore';
 import {
   Plus, Trash2, Loader2, Image as ImageIcon,
-  CheckCircle2, Trophy, Users, Play, XCircle, User as UserIcon, Lock, Sparkles
+  CheckCircle2, Trophy, Users, Play, XCircle, User as UserIcon, Lock, Sparkles, Link as LinkIcon,
+  Hand, Keyboard, Type, MousePointer2, GripVertical
 } from 'lucide-react';
 
 // --- CONFIG ---
@@ -96,20 +98,15 @@ export const QuizCard = ({ quiz, index, onHost, onEdit }) => {
       onClick={() => onEdit(quiz)}
       className={`${style.bg} border ${style.border} ${style.glow} h-64 rounded-3xl p-6 relative flex flex-col justify-between shadow-lg cursor-pointer hover:scale-[1.02] hover:shadow-2xl transition-all duration-300 select-none group overflow-hidden`}
     >
-      {/* Title Section */}
       <div className="flex-1 flex items-center justify-center w-full text-center px-2">
         <h3 className="font-bold text-2xl text-white leading-tight break-words line-clamp-3 group-hover:text-violet-200 transition-colors">
           {quiz.title || "Untitled"}
         </h3>
       </div>
-
-      {/* Footer: Metadata Left, Hidden Action Right */}
       <div className="w-full flex items-center justify-between pt-4 border-t border-white/5 mt-2 relative z-10">
         <div className="text-xs font-bold text-slate-400 uppercase tracking-widest group-hover:text-slate-200 transition-colors">
           {quiz.questions?.length || 0} Questions
         </div>
-
-        {/* Button: Invisible & pushed down until hover */}
         <button
           onClick={(e) => { e.stopPropagation(); onHost(quiz); }}
           className={`
@@ -186,6 +183,14 @@ export const LobbyView = ({ pin, players, onStart, onClose }) => (
 
 export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
   const currentQ = snap.quizSnapshot.questions[snap.currentQuestionIndex];
+  const qType = currentQ.type || 'CHOICE';
+  
+  // --- MULTI-IMAGE LOGIC ---
+  const images = currentQ.images && currentQ.images.length > 0 
+    ? currentQ.images 
+    : (currentQ.image ? [currentQ.image] : []);
+  
+  const [imgIdx, setImgIdx] = useState(0);
   const [imgError, setImgError] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [showSnackbar, setShowSnackbar] = useState(false);
@@ -193,12 +198,27 @@ export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
   const prevCountRef = useRef(0);
   const prevAnsweredIdsRef = useRef(new Set());
 
+  // Count answered players based on mode
   const currentAnsweredPlayers = players.filter(p => p.lastAnsweredRoundId === snap.roundId);
-  const answerCount = currentAnsweredPlayers.length;
-
-  useEffect(() => setImgError(false), [currentQ]);
+  // For buzzer mode, we don't count "answered" normally, we wait for buzzer interactions
+  const answerCount = qType === 'BUZZER' ? 0 : currentAnsweredPlayers.length;
 
   useEffect(() => {
+    setImgError(false);
+    setImgIdx(0);
+  }, [currentQ]);
+
+  // Carousel
+  useEffect(() => {
+    if (images.length > 1) {
+      const t = setInterval(() => setImgIdx(i => (i + 1) % images.length), 4000);
+      return () => clearInterval(t);
+    }
+  }, [images.length]);
+
+  // Notifications for standard/typing modes
+  useEffect(() => {
+    if (qType === 'BUZZER') return;
     if (answerCount > prevCountRef.current && answerCount > 0) {
       const newAnswerer = currentAnsweredPlayers.find(p => !prevAnsweredIdsRef.current.has(p.uid || p.nickname));
       if (newAnswerer) {
@@ -210,29 +230,82 @@ export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
     }
     prevCountRef.current = answerCount;
     prevAnsweredIdsRef.current = new Set(currentAnsweredPlayers.map(p => p.uid || p.nickname));
-  }, [answerCount, currentAnsweredPlayers]);
+  }, [answerCount, currentAnsweredPlayers, qType]);
 
+  // Auto-finish for Standard/Typing if everyone answered
   useEffect(() => {
+    if (qType === 'BUZZER') return;
     if (players.length > 0 && answerCount === players.length && !isFinishing) {
       setIsFinishing(true);
     }
-  }, [answerCount, players.length, isFinishing]);
+  }, [answerCount, players.length, isFinishing, qType]);
 
   useEffect(() => {
-    if (isFinishing) {
+    if (isFinishing && qType !== 'BUZZER') {
       const t = setTimeout(() => {
         updateDoc(doc(db, 'artifacts', appId, 'sessions', snap.pin), { endTime: Date.now() });
       }, 1500);
       return () => clearTimeout(t);
     }
-  }, [isFinishing, snap.pin]);
+  }, [isFinishing, snap.pin, qType]);
+
+  // --- BUZZER LOGIC ---
+  const handleBuzzerJudgment = async (correct) => {
+    if (!snap.buzzedPlayer) return;
+    const pid = snap.buzzedPlayer.uid;
+    const sessionRef = doc(db, 'artifacts', appId, 'sessions', snap.pin);
+
+    // Scoring: 
+    // Correct: Base 500 + 500 * (TimeLeft/TotalTime)
+    // Wrong: Penalty * (1 - TimeLeft/TotalTime) -> Fast Wrong = Low Penalty, Slow Wrong = High Penalty
+    const totalTime = Math.max(1000, (currentQ.duration || 1) * 1000);
+    const remainingTime = Math.max(0, (snap.endTime || Date.now()) - Date.now());
+    const timeRatio = Number.isFinite(remainingTime / totalTime) ? (remainingTime / totalTime) : 0;
+
+    let scoreChange = 0;
+
+    if (correct) {
+      // Award Points
+      scoreChange = Math.round(500 + (500 * timeRatio));
+      const newScore = (snap.players[pid]?.score || 0) + scoreChange;
+      
+      await updateDoc(sessionRef, {
+        [`players.${pid}.score`]: newScore,
+        [`players.${pid}.lastAnsweredRoundId`]: snap.roundId, // Mark as done
+        status: 'LEADERBOARD', 
+        lastUpdated: serverTimestamp()
+      });
+    } else {
+      // Deduct Points
+      // If they answered wrong faster (high remainingTime), fewer points minused.
+      // High remainingTime -> (1 - R/T) is small -> Penalty small.
+      const basePenalty = 500;
+      const penaltyFactor = Math.max(0, 1 - timeRatio); // 0 to 1
+      const deduction = Math.round(basePenalty * penaltyFactor);
+      
+      const newScore = Math.max(0, (snap.players[pid]?.score || 0) - deduction);
+      
+      // Lock player out and clear buzzer
+      const locked = snap.lockedPlayers || [];
+      await updateDoc(sessionRef, {
+        [`players.${pid}.score`]: newScore,
+        buzzedPlayer: null,
+        lockedPlayers: [...locked, pid]
+      });
+    }
+  };
 
   return (
     <div className={`min-h-screen ${THEME.bg} relative flex flex-col`}>
       <HostHeader onClose={onClose} />
       <div className="flex-1 flex flex-col items-center pt-20 px-6 animate-in fade-in">
         <div className="w-full flex justify-between items-center max-w-6xl mb-8">
-          <div className="text-white/30 font-black text-2xl tracking-widest drop-shadow-sm">Q{snap.currentQuestionIndex + 1}</div>
+           <div className="flex items-center gap-4">
+             <div className="text-white/30 font-black text-2xl tracking-widest drop-shadow-sm">Q{snap.currentQuestionIndex + 1}</div>
+             {qType === 'BUZZER' && <div className="bg-rose-500/20 text-rose-400 px-3 py-1 rounded-full text-xs font-bold border border-rose-500/30 flex items-center gap-2"><Hand size={14}/> BUZZER MODE</div>}
+             {qType === 'TYPING' && <div className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-xs font-bold border border-blue-500/30 flex items-center gap-2"><Keyboard size={14}/> TYPING MODE</div>}
+           </div>
+          
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl opacity-50 blur group-hover:opacity-75 transition duration-1000"></div>
             <div className="relative text-5xl font-black text-white bg-[#020617] px-8 py-3 rounded-xl border border-white/10">
@@ -243,14 +316,28 @@ export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
         </div>
 
         <div className="flex-1 w-full max-w-5xl flex flex-col items-center justify-center text-center pb-20">
-          {currentQ.image && !imgError && (
-            <div className="relative mb-8 group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl opacity-20 blur"></div>
-              <img
-                src={currentQ.image}
-                onError={() => setImgError(true)}
-                className="relative max-h-[35vh] w-auto object-contain rounded-2xl shadow-2xl border border-white/10 bg-black/40"
-              />
+          {images.length > 0 && (
+            <div key={snap.currentQuestionIndex} className="relative mb-8 w-full h-[35vh] flex items-center justify-center z-10">
+              <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl opacity-20 blur z-0"></div>
+              {!imgError ? (
+                <img
+                  key={images[imgIdx]}
+                  src={images[imgIdx]}
+                  onError={() => setImgError(true)}
+                  className="relative max-h-full max-w-full object-contain rounded-2xl shadow-2xl border border-white/10 bg-black/40 z-20"
+                  alt="Question Visual"
+                />
+              ) : (
+                <div className="relative w-full h-full flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/40 z-20 text-slate-500">
+                  <ImageIcon size={48} className="mb-2 opacity-50" />
+                  <span className="text-xs font-bold uppercase tracking-widest">Image Unavailable</span>
+                </div>
+              )}
+               {images.length > 1 && !imgError && (
+                 <div className="absolute bottom-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 shadow-lg z-30">
+                    {imgIdx + 1} / {images.length}
+                 </div>
+              )}
             </div>
           )}
 
@@ -258,13 +345,55 @@ export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
             {currentQ.text}
           </h2>
 
-          <div className="grid grid-cols-2 gap-4 w-full">
-            {currentQ.answers.map((a, i) => (
-              <div key={i} className={`${SHAPES[i].color} p-8 rounded-2xl text-white text-2xl font-black flex items-center justify-center shadow-lg border-2 border-white/10 transform transition-transform`}>
-                {a}
-              </div>
-            ))}
-          </div>
+          {/* MODE SPECIFIC UI */}
+          {qType === 'CHOICE' && (
+            <div className="grid grid-cols-2 gap-4 w-full">
+                {currentQ.answers.map((a, i) => (
+                <div key={i} className={`${SHAPES[i].color} p-8 rounded-2xl text-white text-2xl font-black flex items-center justify-center shadow-lg border-2 border-white/10 transform transition-transform`}>
+                    {a}
+                </div>
+                ))}
+            </div>
+          )}
+
+          {qType === 'TYPING' && (
+             <div className="w-full max-w-2xl bg-[#0F172A] border border-blue-500/30 p-8 rounded-3xl flex flex-col items-center gap-4 animate-in slide-in-from-bottom-5">
+                 <Keyboard size={48} className="text-blue-500 mb-2" />
+                 <div className="text-xl text-slate-400 font-bold">Answer:</div>
+                 <div className="text-3xl font-black text-white bg-black/30 px-6 py-3 rounded-xl border border-white/5 w-full">
+                     {currentQ.correctText || "Any valid match"}
+                 </div>
+             </div>
+          )}
+
+          {qType === 'BUZZER' && (
+             <div className="w-full flex flex-col items-center justify-center min-h-[200px]">
+                 {!snap.buzzedPlayer ? (
+                     <div className="flex flex-col items-center animate-pulse">
+                         <div className="w-24 h-24 rounded-full bg-rose-600/20 border-4 border-rose-500/50 flex items-center justify-center mb-4">
+                             <Hand size={40} className="text-rose-500" />
+                         </div>
+                         <h3 className="text-3xl font-black text-white uppercase tracking-wider">Waiting for Buzzer...</h3>
+                     </div>
+                 ) : (
+                     <div className="w-full max-w-2xl bg-slate-900 border border-violet-500/50 p-10 rounded-3xl flex flex-col items-center gap-8 animate-in zoom-in duration-300 shadow-[0_0_50px_rgba(139,92,246,0.2)]">
+                         <div className="flex flex-col items-center">
+                            <span className="text-slate-400 text-sm font-bold uppercase tracking-[0.2em] mb-2">Buzzed In By</span>
+                            <div className="text-5xl font-black text-white">{snap.players[snap.buzzedPlayer.uid]?.nickname}</div>
+                         </div>
+                         
+                         <div className="flex gap-4 w-full">
+                             <button onClick={() => handleBuzzerJudgment(false)} className="flex-1 bg-rose-600 hover:bg-rose-500 text-white py-6 rounded-2xl font-black text-2xl flex items-center justify-center gap-3 transition-transform hover:scale-[1.02] active:scale-95">
+                                 <XCircle size={32} /> WRONG
+                             </button>
+                             <button onClick={() => handleBuzzerJudgment(true)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-6 rounded-2xl font-black text-2xl flex items-center justify-center gap-3 transition-transform hover:scale-[1.02] active:scale-95">
+                                 <CheckCircle2 size={32} /> CORRECT
+                             </button>
+                         </div>
+                     </div>
+                 )}
+             </div>
+          )}
         </div>
 
         {showSnackbar && (
@@ -366,8 +495,6 @@ export const FinishedView = ({ sortedPlayers, onClose }) => {
       <Confetti />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-violet-900/20 via-slate-950 to-slate-950 pointer-events-none"></div>
 
-      {/* REMOVED: "The Champions/MVP/PODIUM" Header Text Block */}
-
       <div className="flex items-end justify-center gap-4 md:gap-8 w-full max-w-5xl px-4 mb-20 relative z-10">
         {top3[1] && (
           <div className="flex flex-col items-center w-1/3 animate-in slide-in-from-bottom-20 duration-[1500ms]">
@@ -412,136 +539,255 @@ export const FinishedView = ({ sortedPlayers, onClose }) => {
 // --- MAIN WRAPPER ---
 export default function App() {
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('DASHBOARD');
+  const [view, setView] = useState('DASHBOARD'); // DASHBOARD, EDITOR, GAME
+  const [currentQuiz, setCurrentQuiz] = useState(null);
   const [quizzes, setQuizzes] = useState([]);
-  const [editingQuiz, setEditingQuiz] = useState(null);
-  const [activeSession, setActiveSession] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [sessionData, setSessionData] = useState(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
+    const unsubscribe = onAuthStateChanged(auth, u => {
+      setUser(u);
+      if (u) loadQuizzes(u.uid);
+    });
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (!user) return;
-    return onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'quizzes'),
-      (snap) => setQuizzes(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-  }, [user]);
+  const loadQuizzes = (uid) => {
+    onSnapshot(collection(db, 'artifacts', appId, 'users', uid, 'quizzes'), snap => {
+      setQuizzes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  };
 
-  useEffect(() => {
-    const saved = localStorage.getItem('mohoot_host_active');
-    if (saved && user) {
-      try {
-        const { quizId, pin } = JSON.parse(saved);
-        setActiveSession({ quizId, pin });
-        setView('GAME');
-      } catch (e) { }
-    }
-  }, [user]);
+  const handleLogin = async () => {
+    try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { console.error(e); }
+  };
 
-  const createQuiz = () => {
-    setEditingQuiz({ title: "Untitled Quiz", questions: [{ text: "", image: "", answers: ["", "", "", ""], correct: 0, duration: 20 }] });
+  const createNewQuiz = () => {
+    setCurrentQuiz({
+      title: "New Quiz",
+      questions: [{ text: "", image: "", images: [], answers: ["", "", "", ""], correct: 0, duration: 20, type: 'CHOICE' }]
+    });
     setView('EDITOR');
   };
 
-  const saveQuiz = async (q) => {
-    const ref = collection(db, 'artifacts', appId, 'users', user.uid, 'quizzes');
-    if (q.id) await updateDoc(doc(ref, q.id), { ...q });
-    else await addDoc(ref, { ...q, createdAt: serverTimestamp() });
+  const handleSaveQuiz = async (quiz) => {
+    const uid = user.uid;
+    if (quiz.id) {
+      await setDoc(doc(db, 'artifacts', appId, 'users', uid, 'quizzes', quiz.id), quiz);
+    } else {
+      await addDoc(collection(db, 'artifacts', appId, 'users', uid, 'quizzes'), quiz);
+    }
     setView('DASHBOARD');
   };
 
-  const launchGame = async (quiz) => {
+  const handleHost = async (quiz) => {
     const pin = Math.floor(100000 + Math.random() * 900000).toString();
-    await setDoc(doc(db, 'artifacts', appId, 'sessions', pin), {
-      hostId: user.uid, quizId: quiz.id, status: 'LOBBY', currentQuestionIndex: 0,
-      players: {}, quizSnapshot: quiz, lastUpdated: serverTimestamp()
-    });
-    setActiveSession({ quizId: quiz.id, pin });
+    const session = {
+      pin,
+      hostId: user.uid,
+      quizId: quiz.id,
+      quizSnapshot: quiz,
+      currentQuestionIndex: -1,
+      status: 'LOBBY',
+      players: {},
+      createdAt: serverTimestamp(),
+      buzzedPlayer: null,
+      lockedPlayers: []
+    };
+    await setDoc(doc(db, 'artifacts', appId, 'sessions', pin), session);
+    setSessionData(session);
     setView('GAME');
-    localStorage.setItem('mohoot_host_active', JSON.stringify({ quizId: quiz.id, pin }));
   };
 
-  if (loading) return <div className={`h-screen ${THEME.bg} flex items-center justify-center`}><Loader2 className="animate-spin text-violet-500" /></div>;
-
   if (!user) return (
-    <div className={`min-h-screen ${THEME.bg} flex flex-col items-center justify-center p-4 relative overflow-hidden`}>
-      <div className={`${THEME.glassCard} p-12 rounded-3xl text-center max-w-md w-full relative z-10`}>
-        <h1 className={`text-5xl font-black mb-4 tracking-tighter ${THEME.textGradient}`}>Mohoot!</h1>
-        <button onClick={() => signInWithPopup(auth, new GoogleAuthProvider())} className={`w-full ${THEME.primaryGradient} py-4 rounded-xl font-bold`}>Sign in with Google</button>
+    <div className={`h-screen ${THEME.bg} flex items-center justify-center p-6 text-center`}>
+      <div className={`${THEME.glassCard} p-10 rounded-3xl max-w-md`}>
+        <h1 className="text-5xl font-black text-white mb-2 tracking-tighter">Mohoot!</h1>
+        <p className="text-slate-400 mb-8 font-medium">The Ultimate Quiz Platform</p>
+        <button onClick={handleLogin} className={`${THEME.primaryGradient} w-full py-4 rounded-xl font-bold text-lg`}>Login with Google</button>
       </div>
     </div>
   );
 
+  if (view === 'GAME') return <GameSession user={user} sessionData={sessionData} onExit={() => setView('DASHBOARD')} />;
+  
+  if (view === 'EDITOR') return <Editor user={user} quiz={currentQuiz} onSave={handleSaveQuiz} onCancel={() => setView('DASHBOARD')} />;
+
   return (
-    <div className={`min-h-screen ${THEME.bg} text-white font-sans selection:bg-violet-500/30`}>
-      {view === 'DASHBOARD' && (
-        <>
-          <DashboardHeader user={user} onSignOut={() => signOut(auth)} />
-          <div className="p-8 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex justify-between items-center mb-10">
-              <h2 className="text-4xl font-black text-white tracking-tight">Library</h2>
-              <button onClick={createQuiz} className={`${THEME.primaryGradient} px-6 py-3 rounded-xl font-bold flex gap-2 items-center`}>
-                <Plus size={20} /> Create New
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {quizzes.map((q, i) => <QuizCard key={q.id} quiz={q} index={i} onHost={launchGame} onEdit={(quiz) => { setEditingQuiz(quiz); setView('EDITOR'); }} />)}
-            </div>
+    <div className={`min-h-screen ${THEME.bg} font-sans pb-20`}>
+      <DashboardHeader user={user} onSignOut={() => signOut(auth)} />
+      <div className="max-w-7xl mx-auto px-6 pt-10">
+        <div className="flex justify-between items-end mb-10">
+          <div>
+            <h2 className="text-4xl font-black text-white tracking-tight mb-2">My Library</h2>
+            <p className="text-slate-400 font-medium">Create, edit, and host your masterpieces.</p>
           </div>
-        </>
-      )}
+          <button onClick={createNewQuiz} className={`${THEME.primaryGradient} pl-6 pr-8 py-3 rounded-2xl font-bold flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 shadow-lg shadow-violet-500/20`}>
+            <Plus size={24} /> Create Quiz
+          </button>
+        </div>
 
-      {view === 'EDITOR' && (
-        <Editor user={user} quiz={editingQuiz} onSave={saveQuiz} onCancel={() => setView('DASHBOARD')} />
-      )}
-
-      {view === 'GAME' && (
-        <GameSession user={user} sessionData={activeSession} onExit={() => { localStorage.removeItem('mohoot_host_active'); setActiveSession(null); setView('DASHBOARD'); }} />
-      )}
+        {quizzes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 opacity-50 border-2 border-dashed border-white/10 rounded-3xl">
+            <Sparkles size={48} className="text-violet-500 mb-4" />
+            <div className="text-xl font-bold text-slate-500">No quizzes yet</div>
+            <div className="text-sm text-slate-600">Click "Create Quiz" to get started</div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {quizzes.map((q, i) => (
+              <QuizCard key={q.id || i} quiz={q} index={i} onHost={handleHost} onEdit={(qz) => { setCurrentQuiz(qz); setView('EDITOR'); }} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-// --- EDITOR WITH IMAGE FIX ---
+// --- EDITOR WITH MULTI-LINK & DRAG-DROP SUPPORT ---
 const Editor = ({ user, quiz, onSave, onCancel }) => {
   const [q, setQ] = useState(quiz);
   const [idx, setIdx] = useState(0);
-  const [previewError, setPreviewError] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [draggedIdx, setDraggedIdx] = useState(null);
+  
   const current = q.questions[idx];
 
-  useEffect(() => {
-    setPreviewError(false);
-  }, [current.image, idx]);
+  // Ensure images array exists
+  const currentImages = current.images || (current.image ? [current.image] : []);
 
   const update = (field, val) => {
     const qs = [...q.questions];
-    qs[idx] = { ...current, [field]: val };
+    if (field === 'images') {
+        qs[idx] = { ...current, images: val, image: '' }; // Sync legacy
+    } else {
+        qs[idx] = { ...current, [field]: val };
+    }
     setQ({ ...q, questions: qs });
   };
 
+  const addImage = () => {
+      if (!urlInput.trim()) return;
+      update('images', [...currentImages, urlInput.trim()]);
+      setUrlInput("");
+  };
+
+  const removeImage = (indexToRemove) => {
+      const newImages = currentImages.filter((_, i) => i !== indexToRemove);
+      update('images', newImages);
+  };
+
+  // SMART ADD: Inherits type from current question or default
   const addQuestion = () => {
-    setQ({ ...q, questions: [...q.questions, { text: "", image: "", answers: ["", "", "", ""], correct: 0, duration: 20 }] });
-    setIdx(q.questions.length);
+    const currentType = q.questions[idx]?.type || 'CHOICE';
+    const newQuestion = { 
+        text: "", 
+        image: "", 
+        images: [], 
+        answers: ["", "", "", ""], 
+        correct: 0, 
+        duration: 20, 
+        type: currentType, 
+        correctText: "" 
+    };
+    
+    const newQuestions = [...q.questions, newQuestion];
+    setQ({ ...q, questions: newQuestions });
+    setIdx(newQuestions.length - 1); // Select the new question
+  };
+
+  // --- DRAG AND DROP HANDLERS ---
+  const handleDragStart = (e, index) => {
+      setDraggedIdx(index);
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", index); // Required for Firefox
+      // Make the drag ghost transparent or styled if desired
+  };
+
+  const handleDragOver = (e, index) => {
+      e.preventDefault(); // Necessary to allow dropping
+      e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e, index) => {
+      e.preventDefault();
+      if (draggedIdx === null || draggedIdx === index) return;
+
+      const newQuestions = [...q.questions];
+      const [draggedItem] = newQuestions.splice(draggedIdx, 1);
+      newQuestions.splice(index, 0, draggedItem);
+
+      setQ({ ...q, questions: newQuestions });
+      
+      // Keep the selected index following the item if it was moved, or stay put?
+      // Better UX: If we moved the selected item, update idx to new position.
+      if (draggedIdx === idx) {
+          setIdx(index);
+      } else if (index === idx && draggedIdx < idx) {
+          // If we dropped something *before* the selected item, selected item index increases
+          setIdx(idx - 1);
+      } else if (index === idx && draggedIdx > idx) {
+           // If we dropped something *after* or on the selected item coming from below?
+           // Actually, simpler logic: verify where the ID/content went, but standard DnD usually just needs re-render.
+           // For now, let's just let the user re-select if it gets confusing, or map by ID if we had one.
+      }
+      
+      setDraggedIdx(null);
+  };
+
+  const getIconForType = (type) => {
+      switch(type) {
+          case 'BUZZER': return <Hand size={14} className="text-rose-400" />;
+          case 'TYPING': return <Keyboard size={14} className="text-blue-400" />;
+          default: return <MousePointer2 size={14} className="text-violet-400" />;
+      }
   };
 
   return (
     <div className="flex gap-6 h-screen p-6 bg-[#020617]">
-      <div className="w-64 flex flex-col gap-2">
+      <div className="w-80 flex flex-col gap-2">
         <h2 className="text-slate-500 font-bold mb-4 px-2 uppercase text-xs tracking-widest">Outline</h2>
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
-          {q.questions.map((_, i) => (
-            <button
+          {q.questions.map((ques, i) => (
+            <div
               key={i}
+              draggable
+              onDragStart={(e) => handleDragStart(e, i)}
+              onDragOver={(e) => handleDragOver(e, i)}
+              onDrop={(e) => handleDrop(e, i)}
               onClick={() => setIdx(i)}
-              className={`w-full text-left p-4 rounded-r-xl border-l-4 transition-all font-bold text-sm ${i === idx ? 'border-violet-500 bg-violet-500/10 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+              className={`
+                group w-full text-left p-4 rounded-xl border transition-all cursor-pointer relative flex items-center gap-3
+                ${i === idx 
+                    ? 'border-violet-500/50 bg-violet-500/10 shadow-[0_0_15px_rgba(139,92,246,0.1)]' 
+                    : 'border-white/5 hover:bg-white/5 hover:border-white/10'
+                }
+              `}
             >
-              Question {i + 1}
-            </button>
+              {/* Drag Handle */}
+              <div className="text-slate-600 group-hover:text-slate-400 cursor-grab active:cursor-grabbing">
+                  <GripVertical size={14} />
+              </div>
+
+              {/* Icon Type */}
+              <div className="bg-black/20 p-2 rounded-lg border border-white/5">
+                  {getIconForType(ques.type)}
+              </div>
+
+              {/* Text Preview */}
+              <div className="flex-1 min-w-0">
+                  <div className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${i===idx ? 'text-violet-300' : 'text-slate-500'}`}>
+                      Question {i + 1}
+                  </div>
+                  <div className={`text-sm font-bold truncate ${i===idx ? 'text-white' : 'text-slate-400'}`}>
+                      {ques.text || <span className="italic opacity-50">Empty Question</span>}
+                  </div>
+              </div>
+            </div>
           ))}
-          <button onClick={addQuestion} className="w-full py-4 border border-dashed border-slate-800 rounded-xl text-slate-600 font-bold text-sm hover:border-violet-500/50 hover:text-violet-400 transition-all flex items-center justify-center gap-2">
+          
+          <button onClick={addQuestion} className="w-full py-4 border border-dashed border-slate-800 rounded-xl text-slate-600 font-bold text-sm hover:border-violet-500/50 hover:text-violet-400 transition-all flex items-center justify-center gap-2 mt-2">
             <Plus size={16} /> Add New
           </button>
         </div>
@@ -559,55 +805,108 @@ const Editor = ({ user, quiz, onSave, onCancel }) => {
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-4">
               <label className="text-xs font-bold text-slate-500 uppercase block tracking-wider">Settings</label>
+              
+              <div className={`${THEME.input} p-4 rounded-xl flex items-center justify-between`}>
+                 <span className="text-xs font-bold text-slate-500">Question Type</span>
+                 <select 
+                    value={current.type || 'CHOICE'} 
+                    onChange={e => update('type', e.target.value)}
+                    className="bg-black/30 text-white text-sm font-bold p-2 rounded-lg outline-none border border-white/10"
+                 >
+                     <option value="CHOICE">Multiple Choice</option>
+                     <option value="BUZZER">Buzzer Mode</option>
+                     <option value="TYPING">Typing Mode</option>
+                 </select>
+              </div>
+
               <div className={`${THEME.input} flex flex-col gap-3 p-4 rounded-xl`}>
-                <div className="flex items-center gap-3">
-                  <ImageIcon size={20} className="text-violet-400" />
-                  <input
-                    className="bg-transparent w-full outline-none text-sm text-white placeholder-slate-600"
-                    value={current.image || ''}
-                    onChange={e => update('image', e.target.value)}
-                    placeholder="Paste Direct Image Link (Right Click Image -> Copy Image Address)" // Updated placeholder
-                  />
+                <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+                        <ImageIcon size={16} /> Image Links
+                    </span>
                 </div>
-                {current.image && (
-                  <div className="relative mt-2 w-full h-32 bg-black/20 rounded-lg overflow-hidden border border-white/5 group flex items-center justify-center">
-                    {!previewError ? (
-                      <img
-                        src={current.image}
-                        className="w-full h-full object-contain"
-                        onError={() => setPreviewError(true)}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center text-rose-500">
-                        <Sparkles size={16} className="mb-1" />
-                        <span className="text-[10px] font-bold uppercase">Invalid URL</span>
-                      </div>
-                    )}
-                    {!previewError && (
-                      <div className="absolute inset-0 flex items-center justify-center text-xs text-white font-bold bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
-                        Preview
-                      </div>
-                    )}
-                  </div>
+                
+                <div className="flex gap-2 mb-2">
+                    <input 
+                        className="bg-black/20 w-full outline-none text-sm text-white placeholder-slate-600 px-3 py-2 rounded-lg border border-white/5 focus:border-violet-500/50 transition-colors"
+                        value={urlInput}
+                        onChange={e => setUrlInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && addImage()}
+                        placeholder="Paste image URL here..."
+                    />
+                    <button onClick={addImage} className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-lg transition-colors">
+                        <Plus size={18} />
+                    </button>
+                </div>
+
+                {currentImages.length === 0 ? (
+                    <div className="text-center py-4 text-slate-700 text-xs font-bold italic">
+                        No images linked.
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                        {currentImages.map((url, i) => (
+                            <div key={i} className="relative aspect-video rounded-lg overflow-hidden group border border-white/10 bg-black/20">
+                                <img src={url} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                                <button 
+                                    onClick={() => removeImage(i)}
+                                    className="absolute top-1 right-1 bg-rose-500/90 p-1 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600 shadow-md"
+                                    title="Remove Link"
+                                >
+                                    <Trash2 size={12} />
+                                </button>
+                                <div className="absolute bottom-0 inset-x-0 bg-black/60 px-2 py-1 text-[9px] text-white/70 truncate">
+                                    {url}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 )}
               </div>
+
               <div className={`${THEME.input} p-4 rounded-xl`}>
                 <span className="text-xs font-bold text-slate-500 block mb-1">Duration (Seconds)</span>
                 <input type="number" className="bg-transparent w-full font-black text-xl outline-none text-white" value={current.duration} onChange={e => update('duration', parseInt(e.target.value) || 0)} />
               </div>
             </div>
+            
             <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-500 uppercase block tracking-wider">Answer Options</label>
-              <div className="grid gap-3">
-                {current.answers.map((ans, i) => (
-                  <div key={i} className={`flex items-center gap-3 p-1.5 rounded-xl border transition-all ${current.correct === i ? 'bg-violet-500/10 border-violet-500/50' : 'bg-[#020617] border-white/5'}`}>
-                    <button onClick={() => update('correct', i)} className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${current.correct === i ? SHAPES[i].color : 'bg-slate-800 text-slate-600 hover:text-slate-400'}`}>
-                      <CheckCircle2 size={20} className={current.correct === i ? "text-white" : "text-current"} />
-                    </button>
-                    <input className="bg-transparent flex-1 font-bold text-sm py-2 outline-none text-white placeholder-slate-700" value={ans} onChange={e => { const newAns = [...current.answers]; newAns[i] = e.target.value; update('answers', newAns); }} placeholder={`Option ${i + 1}`} />
+              <label className="text-xs font-bold text-slate-500 uppercase block tracking-wider">
+                  {current.type === 'TYPING' ? 'Acceptable Answer' : 'Answer Options'}
+              </label>
+              
+              {(current.type === 'CHOICE' || !current.type) && (
+                  <div className="grid gap-3">
+                    {current.answers.map((ans, i) => (
+                    <div key={i} className={`flex items-center gap-3 p-1.5 rounded-xl border transition-all ${current.correct === i ? 'bg-violet-500/10 border-violet-500/50' : 'bg-[#020617] border-white/5'}`}>
+                        <button onClick={() => update('correct', i)} className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${current.correct === i ? SHAPES[i].color : 'bg-slate-800 text-slate-600 hover:text-slate-400'}`}>
+                        <CheckCircle2 size={20} className={current.correct === i ? "text-white" : "text-current"} />
+                        </button>
+                        <input className="bg-transparent flex-1 font-bold text-sm py-2 outline-none text-white placeholder-slate-700" value={ans} onChange={e => { const newAns = [...current.answers]; newAns[i] = e.target.value; update('answers', newAns); }} placeholder={`Option ${i + 1}`} />
+                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+              )}
+
+              {current.type === 'TYPING' && (
+                  <div className={`${THEME.input} p-4 rounded-xl`}>
+                      <span className="text-xs font-bold text-slate-500 block mb-2">Exact Match Text (Case Insensitive)</span>
+                      <input 
+                        className="bg-black/30 w-full p-4 rounded-lg font-bold text-lg text-white border border-white/10 focus:border-blue-500 outline-none" 
+                        value={current.correctText || ''} 
+                        onChange={e => update('correctText', e.target.value)} 
+                        placeholder="e.g. Paris"
+                      />
+                  </div>
+              )}
+
+              {current.type === 'BUZZER' && (
+                   <div className={`${THEME.input} p-8 rounded-xl flex flex-col items-center justify-center text-center opacity-75`}>
+                        <Hand size={48} className="text-slate-600 mb-4" />
+                        <h4 className="text-white font-bold mb-2">Buzzer Mode</h4>
+                        <p className="text-slate-500 text-sm">No options needed. You will verbally confirm if the buzzed player is correct.</p>
+                   </div>
+              )}
             </div>
           </div>
         </div>
@@ -623,13 +922,13 @@ const Editor = ({ user, quiz, onSave, onCancel }) => {
   );
 };
 
-const GameSession = ({ user, sessionData, onExit }) => {
+export const GameSession = ({ user, sessionData, onExit }) => {
   const [snap, setSnap] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const pin = sessionData.pin;
 
   useEffect(() => {
-    return onSnapshot(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), s => s.exists() ? setSnap({ ...s.data(), pin }) : onExit());
+    return onSnapshot(doc(db, 'artifacts', appId, 'sessions', pin), s => s.exists() ? setSnap({ ...s.data(), pin }) : onExit());
   }, [pin]);
 
   useEffect(() => {
@@ -638,7 +937,25 @@ const GameSession = ({ user, sessionData, onExit }) => {
         const remaining = Math.ceil((snap.endTime - Date.now()) / 1000);
         setTimeLeft(Math.max(0, remaining));
         if (remaining <= 0) {
-          updateDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), { status: 'LEADERBOARD', lastUpdated: serverTimestamp() });
+          // Time UP logic: for BUZZER questions, if a player is currently buzzed
+          // we should not immediately advance to the leaderboard — allow the
+          // host to judge the buzzed player. If nobody buzzed, advance as usual.
+          try {
+            const currentQ = snap.quizSnapshot?.questions?.[snap.currentQuestionIndex];
+            const qType = currentQ?.type || 'CHOICE';
+
+            if (qType === 'BUZZER' && snap.buzzedPlayer) {
+              // Freeze the timer at 0 for clients by setting endTime to now,
+              // but keep status as QUESTION so host can press Correct/Wrong.
+              if (snap.endTime && snap.endTime > Date.now()) {
+                updateDoc(doc(db, 'artifacts', appId, 'sessions', pin), { endTime: Date.now(), lastUpdated: serverTimestamp() });
+              }
+            } else {
+              updateDoc(doc(db, 'artifacts', appId, 'sessions', pin), { status: 'LEADERBOARD', lastUpdated: serverTimestamp() });
+            }
+          } catch (e) {
+            console.error('Timer update error', e);
+          }
         }
       }, 100);
       return () => clearInterval(timer);
@@ -649,9 +966,17 @@ const GameSession = ({ user, sessionData, onExit }) => {
     const nIdx = snap.currentQuestionIndex + 1;
     const q = snap.quizSnapshot.questions[nIdx];
     const payload = q
-      ? { status: 'QUESTION', currentQuestionIndex: nIdx, roundId: Date.now(), startTime: Date.now() + 2000, endTime: Date.now() + 2000 + (q.duration * 1000) }
+      ? { 
+          status: 'QUESTION', 
+          currentQuestionIndex: nIdx, 
+          roundId: Date.now(), 
+          startTime: Date.now() + 2000, 
+          endTime: Date.now() + 2000 + (q.duration * 1000),
+          buzzedPlayer: null, // Reset buzzer
+          lockedPlayers: []   // Reset locks
+        }
       : { status: 'FINISHED' };
-    updateDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), { ...payload, lastUpdated: serverTimestamp() });
+    updateDoc(doc(db, 'artifacts', appId, 'sessions', pin), { ...payload, lastUpdated: serverTimestamp() });
   };
 
   if (!snap) return <div className={`h-screen flex items-center justify-center ${THEME.bg}`}><Loader2 className="animate-spin text-violet-500" /></div>;
@@ -659,8 +984,8 @@ const GameSession = ({ user, sessionData, onExit }) => {
   const players = Object.values(snap.players || {});
   const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
 
-  if (snap.status === 'LOBBY') return <LobbyView pin={pin} players={players} onStart={() => next()} onClose={() => deleteDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin))} />;
-  if (snap.status === 'QUESTION') return <QuestionView snap={snap} players={players} timeLeft={timeLeft} onSkip={() => updateDoc(doc(db, 'artifacts', 'mohoot-prod', 'sessions', pin), { status: 'LEADERBOARD', lastUpdated: serverTimestamp() })} onClose={() => onExit()} />;
+  if (snap.status === 'LOBBY') return <LobbyView pin={pin} players={players} onStart={() => next()} onClose={() => deleteDoc(doc(db, 'artifacts', appId, 'sessions', pin))} />;
+  if (snap.status === 'QUESTION') return <QuestionView snap={snap} players={players} timeLeft={timeLeft} onSkip={() => updateDoc(doc(db, 'artifacts', appId, 'sessions', pin), { status: 'LEADERBOARD', lastUpdated: serverTimestamp() })} onClose={() => onExit()} />;
   if (snap.status === 'LEADERBOARD') return <LeaderboardView snap={snap} sortedPlayers={sortedPlayers} onNext={next} onClose={() => onExit()} />;
   if (snap.status === 'FINISHED') return <FinishedView sortedPlayers={sortedPlayers} onClose={() => onExit()} />;
   return null;

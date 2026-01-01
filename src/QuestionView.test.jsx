@@ -94,4 +94,55 @@ describe('QuestionView', () => {
       endTime: expect.any(Number)
     }));
   });
+
+  it('renders multiple images and rotates carousel', async () => {
+    const multiImageSnap = {
+      ...baseSnap,
+      quizSnapshot: {
+        questions: [
+          {
+            text: 'Carousel Q',
+            answers: ['A', 'B', 'C', 'D'],
+            correct: 0,
+            duration: 20,
+            images: ['http://example.com/1.png', 'http://example.com/2.png']
+          }
+        ]
+      }
+    };
+
+    render(
+      <QuestionView
+        snap={multiImageSnap}
+        players={[]}
+        timeLeft={20}
+        onSkip={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    // Initial Image 1
+    const img1 = screen.getByRole('img');
+    expect(img1).toHaveAttribute('src', 'http://example.com/1.png');
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+
+    // Fast-forward 4s (carousel interval)
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+
+    // Should be Image 2
+    const img2 = screen.getByRole('img');
+    expect(img2).toHaveAttribute('src', 'http://example.com/2.png');
+    expect(screen.getByText('2 / 2')).toBeInTheDocument();
+    
+    // Fast-forward another 4s
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+
+    // Should loop back to Image 1
+    const img3 = screen.getByRole('img');
+    expect(img3).toHaveAttribute('src', 'http://example.com/1.png');
+  });
 });

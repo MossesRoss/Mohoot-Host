@@ -6,7 +6,7 @@ export default defineConfig(({ command, mode }) => {
   const isVercel = process.env.VERCEL === '1';
   return {
     plugins: [react()],
-    base: isVercel ? '/' : '/Mohoot-Host/', 
+    base: '/', 
     test: {
       globals: true,
       environment: 'jsdom',
