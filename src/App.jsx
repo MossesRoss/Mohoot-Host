@@ -299,19 +299,22 @@ export const QuestionView = ({ snap, players, timeLeft, onSkip, onClose }) => {
     <div className={`min-h-screen ${THEME.bg} relative flex flex-col`}>
       <HostHeader onClose={onClose} />
       <div className="flex-1 flex flex-col items-center pt-20 px-6 animate-in fade-in">
-        <div className="w-full flex justify-between items-center max-w-6xl mb-8">
+        <div className="w-full flex justify-between items-center max-w-6xl mb-8 relative">
            <div className="flex items-center gap-4">
              <div className="text-white/30 font-black text-2xl tracking-widest drop-shadow-sm">Q{snap.currentQuestionIndex + 1}</div>
-             {qType === 'BUZZER' && <div className="bg-rose-500/20 text-rose-400 px-3 py-1 rounded-full text-xs font-bold border border-rose-500/30 flex items-center gap-2"><Hand size={14}/> BUZZER MODE</div>}
-             {qType === 'TYPING' && <div className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-xs font-bold border border-blue-500/30 flex items-center gap-2"><Keyboard size={14}/> TYPING MODE</div>}
+             {/* {qType === 'BUZZER' && <div className="bg-rose-500/20 text-rose-400 px-3 py-1 rounded-full text-xs font-bold border border-rose-500/30 flex items-center gap-2"><Hand size={14}/> BUZZER MODE</div>}
+             {qType === 'TYPING' && <div className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-xs font-bold border border-blue-500/30 flex items-center gap-2"><Keyboard size={14}/> TYPING MODE</div>} */}
            </div>
           
-          <div className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl opacity-50 blur group-hover:opacity-75 transition duration-1000"></div>
-            <div className="relative text-5xl font-black text-white bg-[#020617] px-8 py-3 rounded-xl border border-white/10">
-              {timeLeft}
+          <div className="absolute left-1/2 -translate-x-1/2">
+            <div className="relative group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-2xl opacity-50 blur group-hover:opacity-75 transition duration-1000"></div>
+              <div className="relative text-5xl font-black text-white bg-[#020617] px-8 py-3 rounded-xl border border-white/10">
+                {timeLeft}
+              </div>
             </div>
           </div>
+          
           <div className="w-10"></div>
         </div>
 
